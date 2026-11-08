@@ -7,7 +7,9 @@
   "iconURL": "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/docs/icon.png",
   "website": "https://github.com/NB6RULES/ConeSetter",
   "tintColor": "#FF6A12",
-  "featuredApps": ["com.nb6rules.conesetter"],
+  "featuredApps": [
+    "com.nb6rules.conesetter"
+  ],
   "apps": [
     {
       "name": "Cone Setter",
@@ -19,14 +21,29 @@
       "tintColor": "#FF6A12",
       "category": "utilities",
       "screenshots": [],
-      "versions": [],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "buildVersion": "1",
+          "date": "2026-11-08T18:59:03Z",
+          "localizedDescription": "Cone Setter: AR + LiDAR cone placement for FS test tracks",
+          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.0.0-b1/ConeSetter.ipa",
+          "size": 522371,
+          "minOSVersion": "18.0"
+        }
+      ],
       "appPermissions": {
         "entitlements": [],
         "privacy": {
           "NSCameraUsageDescription": "Cone Setter uses the camera and LiDAR to show where each cone goes on the ground.",
           "NSLocationWhenInUseUsageDescription": "Cone Setter tags saved track layouts with the site location so you can find them again."
         }
-      }
+      },
+      "version": "1.0.0",
+      "versionDate": "2026-11-08T18:59:03Z",
+      "versionDescription": "Cone Setter: AR + LiDAR cone placement for FS test tracks",
+      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.0.0-b1/ConeSetter.ipa",
+      "size": 522371
     }
   ],
   "news": []
