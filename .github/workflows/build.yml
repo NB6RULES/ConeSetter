@@ -1,0 +1,113 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "source.json"
+      - "README.md"
+      - "docs/**"
+      - "examples/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-ipa
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          XC=$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          mkdir -p Support
+          xcodegen generate
+
+      - name: Build (unsigned)
+        run: |
+          xcodebuild \
+            -project ConeSetter.xcodeproj \
+            -target ConeSetter \
+            -configuration Release \
+            -sdk iphoneos \
+            SYMROOT="$PWD/build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            build > xcodebuild.log 2>&1 || {
+              echo "::group::Compiler errors"
+              grep -E "error:|fatal error" xcodebuild.log | sort -u | head -100
+              echo "::endgroup::"
+              tail -60 xcodebuild.log
+              exit 1
+            }
+          grep -E "warning:" xcodebuild.log | sort -u | head -40 || true
+          test -d build/Release-iphoneos/ConeSetter.app
+
+      - name: Package IPA
+        run: |
+          rm -rf Payload && mkdir Payload
+          cp -R build/Release-iphoneos/ConeSetter.app Payload/
+          zip -qry ConeSetter.ipa Payload
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Payload/ConeSetter.app/Info.plist)
+          BUILD=${{ github.run_number }}
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD=$BUILD" >> "$GITHUB_ENV"
+          echo "TAG=v$VERSION-b$BUILD" >> "$GITHUB_ENV"
+          echo "SIZE=$(stat -f%z ConeSetter.ipa)" >> "$GITHUB_ENV"
+          ls -la ConeSetter.ipa
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ConeSetter-ipa
+          path: ConeSetter.ipa
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES=$(git log -1 --pretty=%s)
+          gh release create "$TAG" ConeSetter.ipa \
+            --title "Cone Setter $VERSION (build $BUILD)" \
+            --notes "$NOTES" \
+            --target "$GITHUB_SHA"
+          echo "NOTES=$NOTES" >> "$GITHUB_ENV"
+
+      - name: Update SideStore source
+        run: |
+          python3 scripts/update_source.py \
+            --version "$VERSION" \
+            --build "$BUILD" \
+            --size "$SIZE" \
+            --url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/ConeSetter.ipa" \
+            --notes "$NOTES"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add source.json
+          git commit -m "source.json: $VERSION build $BUILD [skip ci]" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
