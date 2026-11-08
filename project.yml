@@ -1,0 +1,42 @@
+name: ConeSetter
+options:
+  bundleIdPrefix: com.nb6rules
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  ConeSetter:
+    type: application
+    platform: iOS
+    sources:
+      - path: ConeSetter
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleDisplayName: Cone Setter
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIRequiredDeviceCapabilities: [arkit]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSupportsIndirectInputEvents: true
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSCameraUsageDescription: Cone Setter uses the camera and LiDAR to show where each cone goes on the ground.
+        NSLocationWhenInUseUsageDescription: Cone Setter tags saved track layouts with the site location so you can find them again.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nb6rules.conesetter
+        PRODUCT_NAME: ConeSetter
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO

@@ -1,0 +1,33 @@
+{
+  "name": "Cone Setter",
+  "identifier": "com.nb6rules.conesetter.source",
+  "subtitle": "AR + LiDAR cone layouts for Formula Student test days",
+  "description": "Sideload source for Cone Setter, an iPhone app that uses ARKit and the LiDAR scanner to show where every cone of a Formula Student / FS-AI skidpad, acceleration or autocross layout goes.",
+  "sourceURL": "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json",
+  "iconURL": "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/docs/icon.png",
+  "website": "https://github.com/NB6RULES/ConeSetter",
+  "tintColor": "#FF6A12",
+  "featuredApps": ["com.nb6rules.conesetter"],
+  "apps": [
+    {
+      "name": "Cone Setter",
+      "bundleIdentifier": "com.nb6rules.conesetter",
+      "developerName": "NB6RULES",
+      "subtitle": "Place FS track cones with AR + LiDAR",
+      "localizedDescription": "Lay out Formula Student / FS-AI test tracks with your iPhone Pro.\n\n• Skidpad and acceleration layouts generated from FS dimensions (editable), plus CSV import for autocross / trackdrive\n• Tap two taped reference marks (A and B) to align the layout to the ground\n• A ghost cone, distance, direction arrow and centimetre offset guide you to each spot, with haptics inside your tolerance\n• Chain mode: every cone you mark becomes a reference for the cones after it, so tracking drift doesn't build up\n• Mark a placed cone by aiming at its tip — no need to see under it\n• Live fit RMS and red flags for cones out of tolerance\n• Save sessions with the AR map and GPS site tag, export measured positions as CSV\n\nBuilt for the iPhone 17 Pro Max (works on any LiDAR iPhone running iOS 18+).",
+      "iconURL": "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/docs/icon.png",
+      "tintColor": "#FF6A12",
+      "category": "utilities",
+      "screenshots": [],
+      "versions": [],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSCameraUsageDescription": "Cone Setter uses the camera and LiDAR to show where each cone goes on the ground.",
+          "NSLocationWhenInUseUsageDescription": "Cone Setter tags saved track layouts with the site location so you can find them again."
+        }
+      }
+    }
+  ],
+  "news": []
+}
