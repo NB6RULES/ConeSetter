@@ -23,6 +23,15 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "1.2.0",
+          "buildVersion": "6",
+          "date": "2026-11-09T23:13:13Z",
+          "localizedDescription": "Fix resume, anchors, tilt detection and checkpoint race; update checker; new dark UI with gauge, g-meter and track cards",
+          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.2.0-b6/ConeSetter.ipa",
+          "size": 1031769,
+          "minOSVersion": "18.0"
+        },
+        {
           "version": "1.1.0",
           "buildVersion": "5",
           "date": "2026-11-09T02:26:39Z",
@@ -48,11 +57,11 @@
           "NSLocationWhenInUseUsageDescription": "Cone Setter tags saved track layouts with the site location so you can find them again."
         }
       },
-      "version": "1.1.0",
-      "versionDate": "2026-11-09T02:26:39Z",
-      "versionDescription": "Speed tab: GPS+IMU speed logger, heatmap path, graphs, elevation, skip stops, Excel export",
-      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.1.0-b5/ConeSetter.ipa",
-      "size": 867161
+      "version": "1.2.0",
+      "versionDate": "2026-11-09T23:13:13Z",
+      "versionDescription": "Fix resume, anchors, tilt detection and checkpoint race; update checker; new dark UI with gauge, g-meter and track cards",
+      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.2.0-b6/ConeSetter.ipa",
+      "size": 1031769
     }
   ],
   "news": []
