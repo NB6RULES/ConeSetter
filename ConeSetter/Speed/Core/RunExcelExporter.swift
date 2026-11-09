@@ -28,7 +28,7 @@ enum RunExcelExporter {
 
         // MARK: Summary
         let sum = wb.addSheet("Summary")
-        sum.widths = [0: 30, 1: 16, 2: 10, 3: 3]
+        sum.widths = [0: 30, 1: 24, 2: 10, 3: 3]
         sum.set(0, [.t("Cone Setter · Speed run", .title)])
         sum.set(1, [.t(run.name, .subtitle)])
         sum.set(2, [.t("Recorded", .bold), .number(excelDate(run.startDate), .dateTime)])

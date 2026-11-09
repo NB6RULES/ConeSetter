@@ -7,13 +7,16 @@ import UIKit
 /// when available) and the speed / acceleration graphs.
 @MainActor
 enum RunImageRenderer {
-    static func exportImages(run: SpeedRun, unit: SpeedUnit) async -> RunExportImages {
+    static func exportImages(run: SpeedRun, unit: SpeedUnit, skip: IdleSkip) async -> RunExportImages {
         var images = RunExportImages()
         images.trackSize = (560, 560)
         images.chartSize = (720, 320)
         images.track = await trackPNG(run: run, unit: unit, points: 1120)
-        images.speedChart = chartPNG(SpeedChartImage(run: run, unit: unit), size: CGSize(width: 720, height: 320))
-        images.accelChart = chartPNG(AccelChartImage(run: run), size: CGSize(width: 720, height: 320))
+        let series = ChartData.build(run, unit: unit, skip: skip, max: 1200)
+        let size = CGSize(width: 720, height: 320)
+        images.speedChart = chartPNG(SpeedChartImage(series: series, unit: unit), size: size)
+        images.accelChart = chartPNG(AccelChartImage(series: series), size: size)
+        images.elevationChart = chartPNG(ElevationChartImage(series: series), size: size)
         return images
     }
 

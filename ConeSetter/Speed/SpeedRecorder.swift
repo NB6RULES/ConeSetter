@@ -26,6 +26,7 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
     @Published private(set) var latAccel: Double = 0
     @Published private(set) var distance: Double = 0
     @Published private(set) var topSpeed: Double = 0
+    @Published private(set) var altitude: Double?
     @Published private(set) var gpsAccuracy: Double?
     @Published private(set) var gpsAge: Double = .infinity
     @Published private(set) var imuState: IMUState = .off
@@ -42,6 +43,7 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
 
     private let manager = CLLocationManager()
     private let motion = CMMotionManager()
+    private let altimeter = CMAltimeter()
     private var engine: FusionEngine?
     private var startDate = Date()
     private var startUptime: TimeInterval = 0
@@ -109,6 +111,12 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
                 MainActor.assumeIsolated { self?.handleMotion(dm) }
             }
         }
+        if CMAltimeter.isRelativeAltitudeAvailable() {
+            altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, _ in
+                guard let data else { return }
+                MainActor.assumeIsolated { self?.handleAltitude(data) }
+            }
+        }
         UIApplication.shared.isIdleTimerDisabled = true
         startUITimer()
         Haptics.success()
@@ -120,6 +128,7 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
         guard isRecording, let engine else { return nil }
         isRecording = false
         motion.stopDeviceMotionUpdates()
+        altimeter.stopRelativeAltitudeUpdates()
         (bgSession as? CLBackgroundActivitySession)?.invalidate()
         bgSession = nil
         manager.allowsBackgroundLocationUpdates = false
@@ -136,7 +145,7 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
         let df = DateFormatter()
         df.dateFormat = "d MMM HH:mm"
         let run = SpeedRun(id: UUID(), name: "Run · \(df.string(from: startDate))", startDate: startDate,
-                           samples: samples, fixes: engine.fixes, imuUsed: engine.useIMU)
+                           samples: samples, fixes: engine.fixes, imuUsed: engine.useIMU, baro: engine.baro)
         RunStore.shared.save(run)
         lastSavedRun = run
         return run
@@ -146,6 +155,7 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
         guard isRecording else { return }
         isRecording = false
         motion.stopDeviceMotionUpdates()
+        altimeter.stopRelativeAltitudeUpdates()
         (bgSession as? CLBackgroundActivitySession)?.invalidate()
         bgSession = nil
         manager.allowsBackgroundLocationUpdates = false
@@ -168,6 +178,11 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
                          rotationRate: SIMD3(w.x, w.y, w.z))
     }
 
+    private func handleAltitude(_ data: CMAltitudeData) {
+        guard isRecording, let engine else { return }
+        engine.addBaro(t: data.timestamp - startUptime, rel: data.relativeAltitude.doubleValue)
+    }
+
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         MainActor.assumeIsolated {
             for loc in locations { self.handleLocation(loc) }
@@ -188,6 +203,7 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
         gpsAccuracy = loc.horizontalAccuracy >= 0 ? loc.horizontalAccuracy : nil
         if !isRecording {
             speed = max(0, loc.speed)
+            altitude = loc.verticalAccuracy >= 0 ? loc.altitude : nil
             return
         }
         guard let engine, loc.timestamp >= startDate.addingTimeInterval(-0.5) else { return }
@@ -227,13 +243,14 @@ final class SpeedRecorder: NSObject, ObservableObject, CLLocationManagerDelegate
         latAccel = engine.liveLatAccel
         distance = engine.liveDistance
         topSpeed = engine.topSpeed
+        altitude = engine.liveAltitude
         imuState = engine.state
 
         if elapsed - lastCheckpoint > 30 {
             lastCheckpoint = elapsed
             RunStore.shared.writeCheckpoint(SpeedRun(
                 id: UUID(), name: "Run", startDate: startDate,
-                samples: engine.samples, fixes: engine.fixes, imuUsed: engine.useIMU))
+                samples: engine.samples, fixes: engine.fixes, imuUsed: engine.useIMU, baro: engine.baro))
         }
     }
 

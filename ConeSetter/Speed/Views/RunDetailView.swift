@@ -5,24 +5,33 @@ struct RunDetailView: View {
     let summary: RunSummary
 
     @AppStorage("speedUnit") private var unitRaw = SpeedUnit.kmh.rawValue
+    @AppStorage("skipStops") private var skipStops = false
+    @AppStorage("skipBelowMS") private var skipBelowMS = 1.0
+    @AppStorage("skipMinDuration") private var skipMinDuration = 3.0
+    @AppStorage("skipPadding") private var skipPadding = 1.0
     @Environment(\.dismiss) private var dismiss
 
     @State private var run: SpeedRun?
     @State private var stats: RunStats?
-    @State private var points: [ChartPoint] = []
+    @State private var series = ChartSeries()
     @State private var mapCoords: [CLLocationCoordinate2D] = []
     @State private var mapSpeeds: [Double] = []
     @State private var selection: Double?
     @State private var accelSelection: Double?
+    @State private var elevSelection: Double?
     @State private var xMode: ChartXMode = .time
+    @State private var showAdvanced = false
     @State private var exporting: String?
     @State private var share: ShareItem?
     @State private var renaming = false
     @State private var newName = ""
     @State private var confirmDelete = false
-    @State private var loadedUnit: SpeedUnit?
 
     private var unit: SpeedUnit { SpeedUnit(rawValue: unitRaw) ?? .kmh }
+
+    private var skip: IdleSkip {
+        IdleSkip(enabled: skipStops, speedBelow: skipBelowMS, minDuration: skipMinDuration, padding: skipPadding)
+    }
 
     var body: some View {
         Group {
@@ -80,9 +89,8 @@ struct RunDetailView: View {
             }
         }
         .task { await load() }
-        .onChange(of: unitRaw) { _, _ in
-            if let run { points = ChartData.points(run, unit: unit) }
-        }
+        .onChange(of: unitRaw) { _, _ in rebuildSeries() }
+        .onChange(of: skip) { _, _ in rebuildSeries() }
     }
 
     // MARK: Content
@@ -91,7 +99,7 @@ struct RunDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
-                    HeatmapMap(coords: mapCoords, speeds: mapSpeeds, top: st.topSpeed, marker: markerCoordinate(run))
+                    HeatmapMap(coords: mapCoords, speeds: mapSpeeds, top: st.topSpeed, marker: markerCoordinate)
                         .frame(height: 340)
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     HeatLegend(top: st.topSpeed, unit: unit)
@@ -113,7 +121,11 @@ struct RunDetailView: View {
                     StatTile(title: "75 m from launch", value: st.best75m.map { String(format: "%.2f", $0) } ?? "–", unit: st.best75m == nil ? "" : "s")
                     StatTile(title: "75 m trap speed", value: st.best75mTrapSpeed.map { String(format: "%.1f", unit.convert($0)) } ?? "–",
                              unit: st.best75mTrapSpeed == nil ? "" : unit.label)
+                    StatTile(title: "Elevation range", value: elevationRange(st), unit: st.minElevation == nil ? "" : "m")
+                    StatTile(title: "Climb / descent", value: String(format: "+%.0f / −%.0f", st.climb, st.descent), unit: "m")
                 }
+
+                skipCard
 
                 card {
                     HStack {
@@ -125,18 +137,29 @@ struct RunDetailView: View {
                         .pickerStyle(.segmented)
                         .frame(width: 180)
                     }
-                    SpeedChart(points: points, unit: unit, mode: xMode, selection: $selection)
+                    SpeedChart(series: series, unit: unit, mode: xMode, selection: $selection)
                         .frame(height: 230)
-                    Text("Drag on the graph to find that moment on the map.")
+                    Text("Drag on a graph to find that moment on the map.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
 
                 card {
                     Text("Acceleration").font(.headline)
-                    AccelChart(points: points, selection: $accelSelection)
+                    AccelChart(series: series, selection: $accelSelection)
                         .frame(height: 220)
                     Text("Longitudinal: + speeding up, − braking. Lateral: + left, − right.")
                         .font(.caption2).foregroundStyle(.secondary)
+                }
+
+                card {
+                    HStack {
+                        Text("Elevation").font(.headline)
+                        Spacer()
+                        Text(st.barometer ? "Barometer + GPS" : "GPS altitude")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ElevationChart(series: series, mode: xMode, selection: $elevSelection)
+                        .frame(height: 200)
                 }
 
                 HStack(spacing: 10) {
@@ -148,6 +171,10 @@ struct RunDetailView: View {
                         .buttonStyle(FilledButtonStyle(color: .gray))
                 }
                 .disabled(exporting != nil)
+                if skipStops {
+                    Text("Excel charts follow the skip-stops setting. The Data sheet always keeps every sample.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(st.sampleCount) samples · \(String(format: "%.1f", st.sampleRate)) Hz · \(st.fixCount) GPS fixes")
@@ -164,32 +191,87 @@ struct RunDetailView: View {
         .background(Color(.systemGroupedBackground))
     }
 
+    private var skipCard: some View {
+        card {
+            Toggle(isOn: $skipStops.animation()) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Skip stops").font(.headline)
+                    Text(skipStops
+                         ? (series.stopsSkipped == 0 && series.skippedTime < 0.5
+                            ? "No stops matched"
+                            : "Hiding \(RunAnalysis.formatDuration(series.skippedTime)) of standing still")
+                         : "Cut out periods without movement from the graphs")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .tint(.orange)
+
+            DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Skip when slower than")
+                            Spacer()
+                            Text(String(format: "%.1f %@", unit.convert(skipBelowMS), unit.label))
+                                .monospacedDigit().foregroundStyle(.orange)
+                        }
+                        Slider(value: Binding(get: { unit.convert(skipBelowMS) },
+                                              set: { skipBelowMS = $0 / unit.factor }),
+                               in: 0.5...unit.convert(10), step: unit == .ms ? 0.1 : 0.5)
+                    }
+                    Stepper(value: $skipMinDuration, in: 1...120, step: 1) {
+                        HStack {
+                            Text("Only stops longer than")
+                            Spacer()
+                            Text("\(Int(skipMinDuration)) s").monospacedDigit().foregroundStyle(.orange)
+                        }
+                    }
+                    Stepper(value: $skipPadding, in: 0...10, step: 0.5) {
+                        HStack {
+                            Text("Keep either side")
+                            Spacer()
+                            Text(String(format: "%.1f s", skipPadding)).monospacedDigit().foregroundStyle(.orange)
+                        }
+                    }
+                    Button("Reset to defaults") {
+                        skipBelowMS = 1
+                        skipMinDuration = 3
+                        skipPadding = 1
+                    }
+                    .font(.subheadline)
+                    Text("Samples below the speed, for at least the stop length, are hidden. The time either side is kept so launches and stops still show.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
+            }
+            .disabled(!skipStops)
+            .opacity(skipStops ? 1 : 0.5)
+        }
+    }
+
     private func card<C: View>(@ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) { content() }
             .padding(14)
             .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    private func markerCoordinate(_ run: SpeedRun) -> CLLocationCoordinate2D? {
-        let x: Double?
-        let byTime: Bool
+    private func elevationRange(_ st: RunStats) -> String {
+        guard let lo = st.minElevation, let hi = st.maxElevation else { return "–" }
+        return String(format: "%.0f–%.0f", lo, hi)
+    }
+
+    private var markerCoordinate: CLLocationCoordinate2D? {
+        let p: ChartPoint?
         if let s = selection {
-            x = s
-            byTime = xMode == .time
+            p = series.nearest(s, mode: xMode)
         } else if let a = accelSelection {
-            x = a
-            byTime = true
+            p = series.nearest(a, mode: .time)
+        } else if let e = elevSelection {
+            p = series.nearest(e, mode: xMode)
         } else {
-            return nil
+            p = nil
         }
-        guard let target = x, !run.samples.isEmpty else { return nil }
-        let s = run.samples
-        var lo = 0, hi = s.count - 1
-        while hi - lo > 1 {
-            let mid = (lo + hi) / 2
-            if (byTime ? s[mid].t : s[mid].distance) <= target { lo = mid } else { hi = mid }
-        }
-        return CLLocationCoordinate2D(latitude: s[lo].lat, longitude: s[lo].lon)
+        return p.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
     }
 
     // MARK: Loading & export
@@ -200,9 +282,17 @@ struct RunDetailView: View {
         let idx = RunAnalysis.strideIndices(count: r.samples.count, max: 2500)
         mapCoords = idx.map { CLLocationCoordinate2D(latitude: r.samples[$0].lat, longitude: r.samples[$0].lon) }
         mapSpeeds = idx.map { r.samples[$0].speed }
-        points = ChartData.points(r, unit: unit)
+        series = ChartData.build(r, unit: unit, skip: skip)
         stats = st
         run = r
+    }
+
+    private func rebuildSeries() {
+        guard let run else { return }
+        selection = nil
+        accelSelection = nil
+        elevSelection = nil
+        series = ChartData.build(run, unit: unit, skip: skip)
     }
 
     private enum ExportKind { case xlsx, csv, gpx }
@@ -210,6 +300,7 @@ struct RunDetailView: View {
     private func export(_ kind: ExportKind) {
         guard let run else { return }
         let unit = self.unit
+        let skip = self.skip
         let base = run.name
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
@@ -221,9 +312,9 @@ struct RunDetailView: View {
             do {
                 switch kind {
                 case .xlsx:
-                    let images = await RunImageRenderer.exportImages(run: run, unit: unit)
+                    let images = await RunImageRenderer.exportImages(run: run, unit: unit, skip: skip)
                     let data = await Task.detached(priority: .userInitiated) {
-                        RunExcelExporter.workbook(run: run, unit: unit, images: images)
+                        RunExcelExporter.workbook(run: run, unit: unit, images: images, skip: skip)
                     }.value
                     let url = dir.appendingPathComponent("\(base).xlsx")
                     try data.write(to: url, options: .atomic)

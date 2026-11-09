@@ -4,8 +4,13 @@ import SwiftUI
 struct ConeSetterApp: App {
     var body: some Scene {
         WindowGroup {
-            HomeView()
-                .tint(.orange)
+            TabView {
+                HomeView()
+                    .tabItem { Label("Cones", systemImage: "cone.fill") }
+                SpeedHomeView()
+                    .tabItem { Label("Speed", systemImage: "speedometer") }
+            }
+            .tint(.orange)
         }
     }
 }

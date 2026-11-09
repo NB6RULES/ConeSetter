@@ -208,24 +208,48 @@ struct HeatmapMap: View {
 
 struct ChartPoint: Identifiable {
     let id: Int
+    /// x value on the time axis (stops removed when skipping)
     let t: Double
+    /// real elapsed time
+    let realT: Double
     let d: Double
     let v: Double
     let aLong: Double
     let aLat: Double
+    let alt: Double
+    let lat: Double
+    let lon: Double
+}
+
+struct ChartCut: Identifiable {
+    let id: Int
+    let at: Double
+    let removed: Double
+}
+
+struct ChartSeries {
+    var points: [ChartPoint] = []
+    var cuts: [ChartCut] = []
+    var skippedTime: Double = 0
+    var stopsSkipped: Int = 0
 }
 
 enum ChartData {
-    static func points(_ run: SpeedRun, unit: SpeedUnit, max n: Int = 1500) -> [ChartPoint] {
+    static func build(_ run: SpeedRun, unit: SpeedUnit, skip: IdleSkip = IdleSkip(), max n: Int = 1500) -> ChartSeries {
         let s = run.samples
+        guard !s.isEmpty else { return ChartSeries() }
         let rate = s.count > 1 ? Double(s.count - 1) / max(s.last!.t - s.first!.t, 0.1) : 1
         let w = rate > 5 ? 3 : 1
         let longS = RunAnalysis.movingAverage(s.map(\.longAccel), w)
         let latS = RunAnalysis.movingAverage(s.map(\.latAccel), w)
-        return RunAnalysis.strideIndices(count: s.count, max: n).map { i in
-            ChartPoint(id: i, t: s[i].t, d: s[i].distance, v: unit.convert(s[i].speed),
-                       aLong: longS[i] / Geo.g, aLat: latS[i] / Geo.g)
+        let idle = IdleFilter.apply(s, skip)
+        let kept = s.indices.filter { idle.kept[$0] }
+        let pts = RunAnalysis.strideIndices(count: kept.count, max: n).map { kept[$0] }.map { i in
+            ChartPoint(id: i, t: idle.activeT[i], realT: s[i].t, d: s[i].distance, v: unit.convert(s[i].speed),
+                       aLong: longS[i] / Geo.g, aLat: latS[i] / Geo.g, alt: s[i].alt, lat: s[i].lat, lon: s[i].lon)
         }
+        let cuts = idle.cuts.enumerated().map { ChartCut(id: $0.offset, at: $0.element.at, removed: $0.element.removed) }
+        return ChartSeries(points: pts, cuts: cuts, skippedTime: idle.skippedTime, stopsSkipped: cuts.count)
     }
 }
 
@@ -235,13 +259,40 @@ enum ChartXMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+extension ChartSeries {
+    func nearest(_ x: Double, mode: ChartXMode) -> ChartPoint? {
+        guard !points.isEmpty else { return nil }
+        var lo = 0, hi = points.count - 1
+        func key(_ p: ChartPoint) -> Double { mode == .time ? p.t : p.d }
+        while hi - lo > 1 {
+            let m = (lo + hi) / 2
+            if key(points[m]) <= x { lo = m } else { hi = m }
+        }
+        return abs(key(points[lo]) - x) <= abs(key(points[hi]) - x) ? points[lo] : points[hi]
+    }
+}
+
+/// Dashed markers where stopped time was cut out.
+struct CutMarks: ChartContent {
+    var cuts: [ChartCut]
+
+    var body: some ChartContent {
+        ForEach(cuts) { c in
+            RuleMark(x: .value("Skipped", c.at))
+                .foregroundStyle(.orange.opacity(0.7))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+        }
+    }
+}
+
 struct SpeedChart: View {
-    var points: [ChartPoint]
+    var series: ChartSeries
     var unit: SpeedUnit
     var mode: ChartXMode
     @Binding var selection: Double?
 
     var body: some View {
+        let points = series.points
         let top = max(points.map(\.v).max() ?? 1, 1)
         Chart {
             ForEach(points) { p in
@@ -251,12 +302,13 @@ struct SpeedChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 2.2))
                     .foregroundStyle(LinearGradient(gradient: Heat.gradient, startPoint: .bottom, endPoint: .top))
             }
-            if let sel = selection, let p = nearest(sel) {
+            if mode == .time { CutMarks(cuts: series.cuts) }
+            if let sel = selection, let p = series.nearest(sel, mode: mode) {
                 RuleMark(x: .value("Selected", mode == .time ? p.t : p.d))
                     .foregroundStyle(.secondary)
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                        Text(String(format: "%.1f %@ · %.1f s", p.v, unit.label, p.t))
+                        Text(String(format: "%.1f %@ · %.1f s · %.0f m", p.v, unit.label, p.realT, p.d))
                             .font(.caption.weight(.semibold).monospacedDigit())
                             .padding(.horizontal, 6).padding(.vertical, 3)
                             .background(.thinMaterial, in: Capsule())
@@ -264,23 +316,19 @@ struct SpeedChart: View {
             }
         }
         .chartYScale(domain: 0...(top * 1.08))
-        .chartXAxisLabel(mode == .time ? "Time (s)" : "Distance (m)")
+        .chartXAxisLabel(mode == .time ? (series.cuts.isEmpty ? "Time (s)" : "Time, stops skipped (s)") : "Distance (m)")
         .chartYAxisLabel(unit.label)
         .chartXSelection(value: $selection)
-    }
-
-    func nearest(_ x: Double) -> ChartPoint? {
-        points.min { abs((mode == .time ? $0.t : $0.d) - x) < abs((mode == .time ? $1.t : $1.d) - x) }
     }
 }
 
 struct AccelChart: View {
-    var points: [ChartPoint]
+    var series: ChartSeries
     @Binding var selection: Double?
 
     var body: some View {
         Chart {
-            ForEach(points) { p in
+            ForEach(series.points) { p in
                 LineMark(x: .value("Time (s)", p.t), y: .value("g", p.aLong), series: .value("Axis", "Longitudinal"))
                     .foregroundStyle(by: .value("Axis", "Longitudinal"))
                     .lineStyle(StrokeStyle(lineWidth: 1.6))
@@ -289,6 +337,7 @@ struct AccelChart: View {
                     .lineStyle(StrokeStyle(lineWidth: 1.6))
             }
             RuleMark(y: .value("Zero", 0)).foregroundStyle(.secondary.opacity(0.5))
+            CutMarks(cuts: series.cuts)
             if let sel = selection {
                 RuleMark(x: .value("Selected", sel))
                     .foregroundStyle(.secondary)
@@ -296,9 +345,51 @@ struct AccelChart: View {
             }
         }
         .chartForegroundStyleScale(["Longitudinal": Color.blue, "Lateral": Color.green])
-        .chartXAxisLabel("Time (s)")
+        .chartXAxisLabel(series.cuts.isEmpty ? "Time (s)" : "Time, stops skipped (s)")
         .chartYAxisLabel("g")
         .chartLegend(position: .top, alignment: .leading)
+        .chartXSelection(value: $selection)
+    }
+}
+
+struct ElevationChart: View {
+    var series: ChartSeries
+    var mode: ChartXMode
+    @Binding var selection: Double?
+
+    var body: some View {
+        let alts = series.points.map(\.alt)
+        let lo = alts.min() ?? 0, hi = alts.max() ?? 1
+        let pad = max((hi - lo) * 0.15, 1)
+        let floorY = (lo - pad).rounded(.down)
+        Chart {
+            ForEach(series.points) { p in
+                AreaMark(x: .value("x", mode == .time ? p.t : p.d),
+                         yStart: .value("base", floorY), yEnd: .value("Elevation", p.alt))
+                    .foregroundStyle(LinearGradient(colors: [Color.brown.opacity(0.45), Color.brown.opacity(0.05)],
+                                                    startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.monotone)
+                LineMark(x: .value("x", mode == .time ? p.t : p.d), y: .value("Elevation", p.alt))
+                    .foregroundStyle(Color.brown)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .interpolationMethod(.monotone)
+            }
+            if mode == .time { CutMarks(cuts: series.cuts) }
+            if let sel = selection, let p = series.nearest(sel, mode: mode) {
+                RuleMark(x: .value("Selected", mode == .time ? p.t : p.d))
+                    .foregroundStyle(.secondary)
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                        Text(String(format: "%.1f m", p.alt))
+                            .font(.caption.weight(.semibold).monospacedDigit())
+                            .padding(.horizontal, 6).padding(.vertical, 3)
+                            .background(.thinMaterial, in: Capsule())
+                    }
+            }
+        }
+        .chartYScale(domain: floorY...((hi + pad).rounded(.up)))
+        .chartXAxisLabel(mode == .time ? "Time (s)" : "Distance (m)")
+        .chartYAxisLabel("m")
         .chartXSelection(value: $selection)
     }
 }
@@ -306,14 +397,13 @@ struct AccelChart: View {
 // MARK: - Static chart views for the Excel export
 
 struct SpeedChartImage: View {
-    var run: SpeedRun
+    var series: ChartSeries
     var unit: SpeedUnit
 
     var body: some View {
-        let pts = ChartData.points(run, unit: unit, max: 1200)
         VStack(alignment: .leading, spacing: 6) {
-            Text("Speed vs time").font(.headline)
-            SpeedChart(points: pts, unit: unit, mode: .time, selection: .constant(nil))
+            Text(series.cuts.isEmpty ? "Speed vs time" : "Speed vs time (stops skipped)").font(.headline)
+            SpeedChart(series: series, unit: unit, mode: .time, selection: .constant(nil))
         }
         .padding(16)
         .environment(\.colorScheme, .light)
@@ -321,13 +411,25 @@ struct SpeedChartImage: View {
 }
 
 struct AccelChartImage: View {
-    var run: SpeedRun
+    var series: ChartSeries
 
     var body: some View {
-        let pts = ChartData.points(run, unit: .kmh, max: 1200)
         VStack(alignment: .leading, spacing: 6) {
             Text("Acceleration vs time (g)").font(.headline)
-            AccelChart(points: pts, selection: .constant(nil))
+            AccelChart(series: series, selection: .constant(nil))
+        }
+        .padding(16)
+        .environment(\.colorScheme, .light)
+    }
+}
+
+struct ElevationChartImage: View {
+    var series: ChartSeries
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Elevation vs distance (m)").font(.headline)
+            ElevationChart(series: series, mode: .distance, selection: .constant(nil))
         }
         .padding(16)
         .environment(\.colorScheme, .light)
