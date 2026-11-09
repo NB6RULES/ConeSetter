@@ -68,6 +68,7 @@ struct Truth {
     var x: [Double] = []
     var y: [Double] = []
     var psi: [Double] = []
+    var z: [Double] = []
 
     func value(_ arr: [Double], at time: Double) -> Double { RunPostProcessor.interp(t, arr, time) }
 }
@@ -113,6 +114,7 @@ func makeTruth(laps: Double, preRoll: Double, postRoll: Double, rate: Double) ->
         let p = oval.at(s)
         tr.t.append(time); tr.s.append(s); tr.v.append(vv); tr.kappa.append(p.kappa)
         tr.x.append(p.x); tr.y.append(p.y); tr.psi.append(p.psi)
+        tr.z.append(80 + 4 * sin(2 * .pi * s / oval.perimeter))
         time += dt
     }
     tr.aLong = tr.v.indices.map { i in
@@ -131,7 +133,7 @@ struct SimResult {
     var calibratedAt: Double?
 }
 
-func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd) -> SimResult {
+func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd, barometer: Bool = true) -> SimResult {
     var rng = RNG(state: seed)
     let truth = makeTruth(laps: 2, preRoll: 4, postRoll: 4, rate: 100)
     let engine = FusionEngine(useIMU: useIMU)
@@ -140,6 +142,9 @@ func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd
     let accBias = SIMD3<Double>(0.012, -0.008, 0.006)
     var gpsNoise = SIMD2<Double>(0, 0)
     var nextFix = 0.37
+    var nextBaro = 0.2
+    var altNoise = 0.0
+    let z0 = 80.0
     var pending: [(arrive: Double, fix: GPSFix)] = []
     var calibratedAt: Double?
 
@@ -157,11 +162,16 @@ func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd
             let speed = max(0, vt + rng.gauss() * 0.15)
             let psi = truth.value(truth.psi, at: tf)
             let course = Geo.normDeg(90 - psi * 180 / .pi + rng.gauss() * 1.0)
+            altNoise = altNoise * 0.9 + rng.gauss() * 1.2
             pending.append((tf + 0.25, GPSFix(
-                t: tf, lat: ll.lat, lon: ll.lon, alt: 80 + rng.gauss() * 0.5,
+                t: tf, lat: ll.lat, lon: ll.lon, alt: truth.value(truth.z, at: tf) + altNoise,
                 hAcc: 3.5, vAcc: 4, speed: speed, speedAcc: 0.3,
                 course: vt > 1 ? course : -1, courseAcc: vt > 1 ? 5 : -1)))
             nextFix += 1.0
+        }
+        if barometer, t >= nextBaro {
+            engine.addBaro(t: nextBaro, rel: truth.value(truth.z, at: nextBaro) - z0 + rng.gauss() * 0.05 + 0.002 * nextBaro)
+            nextBaro += 1.0
         }
         while let p = pending.first, p.arrive <= t {
             engine.addFix(p.fix)
@@ -186,7 +196,7 @@ func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd
 
     let samples = engine.finalize()
     let run = SpeedRun(id: UUID(), name: "Simulated oval", startDate: Date(timeIntervalSince1970: 1_793_000_000),
-                       samples: samples, fixes: engine.fixes, imuUsed: useIMU)
+                       samples: samples, fixes: engine.fixes, imuUsed: useIMU, baro: engine.baro)
     return SimResult(run: run, truth: truth, finalState: engine.state, calibratedAt: calibratedAt)
 }
 
@@ -246,6 +256,33 @@ func evaluate(_ name: String, _ r: SimResult, expectFused: Bool) {
         check(st.best75m.map { abs($0 - tru.t75) < 0.25 } ?? false, "75 m time within 0.25 s")
     }
     check(st.maxLateral > 0.5 * Geo.g, "lateral g detected in corners")
+
+    // Elevation
+    let ez = s.map { $0.alt - r.truth.value(r.truth.z, at: $0.t) }
+    var truthClimb = 0.0
+    var ref = r.truth.z[0]
+    for z in r.truth.z where z - ref >= 0.3 || ref - z >= 0.3 {
+        if z > ref { truthClimb += z - ref }
+        ref = z
+    }
+    print(String(format: "  elevation RMS err %.2f m  climb %.1f m (truth %.1f)  range %.1f–%.1f m  baro %@",
+                 rms(ez), st.climb, truthClimb, st.minElevation ?? .nan, st.maxElevation ?? .nan, r.run.hasBarometer ? "yes" : "no"))
+    if r.run.hasBarometer {
+        check(rms(ez) < 1.2, "barometric elevation RMS error < 1.2 m")
+        check(abs(st.climb - truthClimb) < 0.3 * truthClimb + 1, "total climb within 30%")
+    } else {
+        check(rms(ez) < 4, "GPS elevation RMS error < 4 m")
+    }
+
+    // Skip stops
+    let idle = IdleFilter.apply(s, IdleSkip(enabled: true, speedBelow: 1, minDuration: 3, padding: 1))
+    let shownSpan = (idle.activeT.last ?? 0)
+    print(String(format: "  skip stops: skipped %.1f s, %d/%d samples shown, active span %.1f s of %.1f s, %d cut(s)",
+                 idle.skippedTime, idle.keptCount, s.count, shownSpan, st.duration, idle.cuts.count))
+    check(idle.skippedTime > 4.5 && idle.skippedTime < 8, "skip stops removes the ~6 s standing at start/end")
+    check(abs(shownSpan + idle.skippedTime - st.duration) < 0.5, "active time + skipped = duration")
+    let off = IdleFilter.apply(s, IdleSkip(enabled: false))
+    check(off.keptCount == s.count && off.skippedTime == 0, "skip disabled keeps everything")
 }
 
 // MARK: - Image for the export test
@@ -296,7 +333,7 @@ evaluate("IMU fusion · tilted mount", fusedA, expectFused: true)
 let fusedB = simulate(useIMU: true, flipAccelSign: true, seed: 7, mount: mountB)
 evaluate("IMU fusion · upright mount, opposite accel sign convention", fusedB, expectFused: true)
 
-let gpsOnly = simulate(useIMU: false, flipAccelSign: false, seed: 99, mount: mountA)
+let gpsOnly = simulate(useIMU: false, flipAccelSign: false, seed: 99, mount: mountA, barometer: false)
 evaluate("GPS only", gpsOnly, expectFused: false)
 
 // Codable round trip
@@ -320,7 +357,9 @@ var images = RunExportImages()
 images.track = testPNG(run: fusedA.run, size: 560)
 images.speedChart = testPNG(run: fusedA.run, size: 320)
 images.chartSize = (320, 320)
-let xlsx = RunExcelExporter.workbook(run: fusedA.run, unit: .kmh, images: images)
+images.elevationChart = testPNG(run: fusedA.run, size: 320)
+let xlsx = RunExcelExporter.workbook(run: fusedA.run, unit: .kmh, images: images,
+                                     skip: IdleSkip(enabled: true, speedBelow: 1, minDuration: 3, padding: 1))
 print(String(format: "  %d bytes in %.2f s", xlsx.count, Date().timeIntervalSince(t0)))
 check(xlsx.count > 10_000, "xlsx generated")
 try? xlsx.write(to: outDir.appendingPathComponent("Sample-export.xlsx"))

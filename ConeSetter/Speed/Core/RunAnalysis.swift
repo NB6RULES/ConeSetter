@@ -18,6 +18,11 @@ struct RunStats: Equatable {
     var fixCount = 0
     var fusedFraction: Double = 0
     var sampleRate: Double = 0
+    var minElevation: Double?
+    var maxElevation: Double?
+    var climb: Double = 0
+    var descent: Double = 0
+    var barometer = false
 }
 
 struct SpeedBand {
@@ -70,6 +75,25 @@ enum RunAnalysis {
         r.maxAccel = max(0, longS.max() ?? 0)
         r.maxBraking = max(0, -(longS.min() ?? 0))
         r.maxLateral = latS.map(abs).max() ?? 0
+
+        // Elevation: total climb / descent with hysteresis so noise doesn't add up.
+        let alts = s.map(\.alt).filter(\.isFinite)
+        r.barometer = run.hasBarometer
+        if !alts.isEmpty {
+            r.minElevation = alts.min()
+            r.maxElevation = alts.max()
+            let threshold = run.hasBarometer ? 0.3 : 2.0
+            var ref = alts[0]
+            for a in alts {
+                if a - ref >= threshold {
+                    r.climb += a - ref
+                    ref = a
+                } else if ref - a >= threshold {
+                    r.descent += ref - a
+                    ref = a
+                }
+            }
+        }
 
         // Launch-based times: 0–100 km/h and 75 m (FS acceleration event length).
         for launch in launches(s) {
@@ -176,5 +200,88 @@ enum RunAnalysis {
         let sec = total - Double(h * 3600 + m * 60)
         if h > 0 { return String(format: "%d:%02d:%04.1f", h, m, sec) }
         return String(format: "%d:%04.1f", m, sec)
+    }
+}
+
+
+// MARK: - Skip stops
+
+/// Options for hiding stationary periods when viewing / exporting a run.
+struct IdleSkip: Codable, Equatable {
+    var enabled = false
+    /// Data below this speed counts as stopped (m/s).
+    var speedBelow: Double = 1.0
+    /// Only stops at least this long are skipped (s).
+    var minDuration: Double = 3
+    /// Seconds kept either side of each stop, so launches and stops stay visible.
+    var padding: Double = 1
+}
+
+struct IdleResult {
+    /// true = sample shown.
+    var kept: [Bool]
+    /// Time axis with skipped stretches removed.
+    var activeT: [Double]
+    /// Active-time positions where a stretch was cut, with the real duration removed.
+    var cuts: [(at: Double, removed: Double)]
+    var skippedTime: Double
+    var keptCount: Int
+}
+
+enum IdleFilter {
+    static func apply(_ s: [SpeedSample], _ opt: IdleSkip) -> IdleResult {
+        let n = s.count
+        guard opt.enabled, n > 1 else {
+            return IdleResult(kept: Array(repeating: true, count: n), activeT: s.map(\.t), cuts: [], skippedTime: 0, keptCount: n)
+        }
+        var kept = Array(repeating: true, count: n)
+        var i = 0
+        while i < n {
+            guard s[i].speed < opt.speedBelow else { i += 1; continue }
+            var j = i
+            while j + 1 < n && s[j + 1].speed < opt.speedBelow { j += 1 }
+            let ta = s[i].t, tb = s[j].t
+            if tb - ta >= opt.minDuration {
+                let lo = i == 0 ? ta - 1 : ta + opt.padding
+                let hi = j == n - 1 ? tb + 1 : tb - opt.padding
+                if hi > lo {
+                    for k in i...j where s[k].t > lo && s[k].t < hi { kept[k] = false }
+                }
+            }
+            i = j + 1
+        }
+        // Never hide everything.
+        if !kept.contains(true) { kept = Array(repeating: true, count: n) }
+
+        var activeT = Array(repeating: 0.0, count: n)
+        var cuts: [(Double, Double)] = []
+        var skipped = 0.0
+        var lastKept: Int?
+        var acc = 0.0
+        var gapStart: Double?
+        for k in 0..<n {
+            if kept[k] {
+                if let lk = lastKept {
+                    if gapStart != nil {
+                        let removed = s[k].t - s[lk].t
+                        skipped += removed
+                        cuts.append((acc, removed))
+                        gapStart = nil
+                    } else {
+                        acc += s[k].t - s[lk].t
+                    }
+                } else if k > 0 {
+                    skipped += s[k].t - s[0].t
+                }
+                activeT[k] = acc
+                lastKept = k
+            } else {
+                if gapStart == nil { gapStart = s[k].t }
+                activeT[k] = acc
+            }
+        }
+        if let lk = lastKept, lk < n - 1 { skipped += s[n - 1].t - s[lk].t }
+        return IdleResult(kept: kept, activeT: activeT, cuts: cuts, skippedTime: skipped,
+                          keptCount: kept.filter { $0 }.count)
     }
 }
