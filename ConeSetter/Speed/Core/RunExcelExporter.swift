@@ -6,6 +6,7 @@ struct RunExportImages {
     var trackSize: (w: Int, h: Int) = (560, 560)
     var speedChart: Data?
     var accelChart: Data?
+    var elevationChart: Data?
     var chartSize: (w: Int, h: Int) = (720, 320)
 }
 
@@ -14,7 +15,8 @@ struct RunExportImages {
 enum RunExcelExporter {
     static let bandCount = 6
 
-    static func workbook(run: SpeedRun, unit: SpeedUnit, images: RunExportImages = RunExportImages()) -> Data {
+    static func workbook(run: SpeedRun, unit: SpeedUnit, images: RunExportImages = RunExportImages(),
+                         skip: IdleSkip = IdleSkip()) -> Data {
         let wb = XLSXWorkbook()
         wb.title = run.name
         let stats = RunAnalysis.stats(run)
@@ -56,12 +58,23 @@ enum RunExcelExporter {
         stat("Max acceleration", stats.maxAccel / Geo.g, "g", .dp3)
         stat("Max braking", stats.maxBraking / Geo.g, "g", .dp3)
         stat("Max lateral", stats.maxLateral / Geo.g, "g", .dp3)
+        stat("Min elevation", stats.minElevation, "m", .dp1)
+        stat("Max elevation", stats.maxElevation, "m", .dp1)
+        stat("Total climb", stats.climb, "m", .dp1)
+        stat("Total descent", stats.descent, "m", .dp1)
+        sum.set(r, [.t("Elevation source", .bold), .t(stats.barometer ? "Barometer, anchored to GPS" : "GPS altitude (smoothed)")]); r += 1
         stat("0–100 km/h", stats.zeroTo100, "s", .dp3)
         stat("75 m from launch", stats.best75m, "s", .dp3)
         stat("75 m trap speed", stats.best75mTrapSpeed.map(unit.convert), u)
         stat("Samples", Double(stats.sampleCount), "", .dp0)
         stat("Sample rate", stats.sampleRate, "Hz", .dp1)
         stat("GPS fixes", Double(stats.fixCount), "", .dp0)
+        let idle = IdleFilter.apply(s, skip)
+        if skip.enabled {
+            sum.set(r, [.t("Stops skipped in charts", .bold), .n(idle.skippedTime, .dp1), .t("s")]); r += 1
+            sum.set(r, [.t("Skip rule", .bold),
+                        .t("below \(fmt1(unit.convert(skip.speedBelow))) \(u) for ≥ \(fmt1(skip.minDuration)) s, keep \(fmt1(skip.padding)) s padding")]); r += 1
+        }
 
         r += 1
         sum.set(r, [.t("Speed bands (track colours)", .header), .t("From (\(u))", .header), .t("To (\(u))", .header)]); r += 1
@@ -73,7 +86,7 @@ enum RunExcelExporter {
         r += 1
         for note in [
             "Sheets: Charts (native Excel charts) · Data (every sample) · GPS fixes (raw Core Location) · Chart data (series behind the charts).",
-            "Coordinates are WGS84. X/Y are metres east/north of the first point.",
+            "Coordinates are WGS84. X/Y are metres east/north of the first point. Elevation is metres above sea level.",
             "Long accel: + = speeding up. Lat accel: + = to the left. 1 g = 9.80665 m/s².",
             "75 m / 0–100 times are measured from the moment the car pulls away (0.5 m/s).",
         ] {
@@ -95,27 +108,37 @@ enum RunExcelExporter {
         if let png = images.accelChart {
             sum.pictures.append(.init(png: png, name: "Acceleration graph", col: 4, row: imgRow,
                                       widthPx: images.chartSize.w, heightPx: images.chartSize.h))
+            imgRow += Int((Double(images.chartSize.h) / 20).rounded(.up)) + 1
+        }
+        if let png = images.elevationChart {
+            sum.pictures.append(.init(png: png, name: "Elevation graph", col: 4, row: imgRow,
+                                      widthPx: images.chartSize.w, heightPx: images.chartSize.h))
         }
 
         // MARK: Chart data (downsampled)
         let cd = wb.addSheet("Chart data")
         cd.freezeRows = 1
-        let idx = RunAnalysis.strideIndices(count: s.count, max: 3000)
-        cd.set(0, [.t("Time (s)", .header), .t("Speed (\(u))", .header), .t("Long accel (g)", .header),
-                   .t("Lat accel (g)", .header), .t("Distance (m)", .header)])
+        let keptIdx = s.indices.filter { idle.kept[$0] }
+        let idx = RunAnalysis.strideIndices(count: keptIdx.count, max: 3000).map { keptIdx[$0] }
+        let timeLabel = skip.enabled ? "Time, stops skipped (s)" : "Time (s)"
+        cd.set(0, [.t(timeLabel, .header), .t("Speed (\(u))", .header), .t("Long accel (g)", .header),
+                   .t("Lat accel (g)", .header), .t("Distance (m)", .header), .t("Elevation (m)", .header),
+                   .t("Real time (s)", .header)])
         var tVals: [Double] = [], vVals: [Double] = [], aLong: [Double] = [], aLat: [Double] = [], dVals: [Double] = []
+        var eVals: [Double] = []
         let smoothLong = RunAnalysis.movingAverage(s.map(\.longAccel), stats.sampleRate > 5 ? 3 : 1)
         let smoothLat = RunAnalysis.movingAverage(s.map(\.latAccel), stats.sampleRate > 5 ? 3 : 1)
         for (k, i) in idx.enumerated() {
-            let t = round3(s[i].t)
+            let t = round3(idle.activeT[i])
             let v = round3(unit.convert(s[i].speed))
             let al = round4(smoothLong[i] / Geo.g)
             let at = round4(smoothLat[i] / Geo.g)
             let d = round3(s[i].distance)
-            tVals.append(t); vVals.append(v); aLong.append(al); aLat.append(at); dVals.append(d)
-            cd.set(k + 1, [.n(t, .dp3), .n(v, .dp2), .n(al, .dp3), .n(at, .dp3), .n(d, .dp2)])
+            let e = round3(s[i].alt)
+            tVals.append(t); vVals.append(v); aLong.append(al); aLat.append(at); dVals.append(d); eVals.append(e)
+            cd.set(k + 1, [.n(t, .dp3), .n(v, .dp2), .n(al, .dp3), .n(at, .dp3), .n(d, .dp2), .n(e, .dp2), .n(round3(s[i].t), .dp3)])
         }
-        cd.widths = [0: 10, 1: 12, 2: 13, 3: 13, 4: 13]
+        cd.widths = [0: 14, 1: 12, 2: 13, 3: 13, 4: 13, 5: 13, 6: 12]
 
         // Track points split into speed bands, two columns (X, Y) per band.
         let trackIdx = RunAnalysis.strideIndices(count: s.count, max: 5000)
@@ -129,7 +152,7 @@ enum RunExcelExporter {
             bandY[b].append(round3(p.y))
             minX = min(minX, p.x); maxX = max(maxX, p.x); minY = min(minY, p.y); maxY = max(maxY, p.y)
         }
-        let bandCol0 = 6
+        let bandCol0 = 8
         for b in 0..<bandCount {
             let cx = bandCol0 + 2 * b
             let range = "\(fmt1(unit.convert(bands[b].lower)))–\(fmt1(unit.convert(bands[b].upper))) \(u)"
@@ -152,11 +175,11 @@ enum RunExcelExporter {
         let tMax = tVals.last.map { $0 > 0 ? $0 : 1 } ?? 1
 
         ch.charts.append(.init(
-            title: "Speed vs time", xTitle: "Time (s)", yTitle: "Speed (\(u))",
+            title: skip.enabled ? "Speed vs time (stops skipped)" : "Speed vs time", xTitle: timeLabel, yTitle: "Speed (\(u))",
             series: [.init(name: "Speed (\(u))", x: ref(0), y: ref(1), xValues: tVals, yValues: vVals, colorHex: "FF6A12", lineWidthPt: 2)],
             xMin: 0, xMax: tMax, yMin: 0, legend: false, col: 1, row: 2, widthPx: 960, heightPx: 380))
         ch.charts.append(.init(
-            title: "Acceleration vs time", xTitle: "Time (s)", yTitle: "Acceleration (g)",
+            title: skip.enabled ? "Acceleration vs time (stops skipped)" : "Acceleration vs time", xTitle: timeLabel, yTitle: "Acceleration (g)",
             series: [
                 .init(name: "Longitudinal (g)", x: ref(0), y: ref(2), xValues: tVals, yValues: aLong, colorHex: "1F77FF", lineWidthPt: 1.5),
                 .init(name: "Lateral (g)", x: ref(0), y: ref(3), xValues: tVals, yValues: aLat, colorHex: "21B573", lineWidthPt: 1.5),
@@ -166,6 +189,14 @@ enum RunExcelExporter {
             title: "Speed vs distance", xTitle: "Distance (m)", yTitle: "Speed (\(u))",
             series: [.init(name: "Speed (\(u))", x: ref(4), y: ref(1), xValues: dVals, yValues: vVals, colorHex: "C2185B", lineWidthPt: 2)],
             xMin: 0, xMax: max(dVals.last ?? 1, 1), yMin: 0, legend: false, col: 1, row: 42, widthPx: 960, heightPx: 380))
+        if let lo = eVals.min(), let hi = eVals.max() {
+            let pad = max((hi - lo) * 0.15, 1)
+            ch.charts.append(.init(
+                title: "Elevation vs distance", xTitle: "Distance (m)", yTitle: "Elevation (m)",
+                series: [.init(name: "Elevation (m)", x: ref(4), y: ref(5), xValues: dVals, yValues: eVals, colorHex: "6D4C41", lineWidthPt: 2)],
+                xMin: 0, xMax: max(dVals.last ?? 1, 1), yMin: (lo - pad).rounded(.down), yMax: (hi + pad).rounded(.up),
+                legend: false, col: 1, row: 62, widthPx: 960, heightPx: 380))
+        }
 
         var trackSeries: [XLSXWorkbook.Series] = []
         for b in 0..<bandCount where !bandX[b].isEmpty {
@@ -187,7 +218,7 @@ enum RunExcelExporter {
                 series: trackSeries, markersOnly: true,
                 xMin: floor((cx - span) / step) * step, xMax: ceil((cx + span) / step) * step,
                 yMin: floor((cy - span) / step) * step, yMax: ceil((cy + span) / step) * step,
-                col: 1, row: 62, widthPx: 760, heightPx: 760))
+                col: 1, row: 82, widthPx: 760, heightPx: 760))
         }
 
         // MARK: Data (every sample)
@@ -196,8 +227,9 @@ enum RunExcelExporter {
         let headers = ["Time", "Elapsed (s)", "Latitude", "Longitude", "Altitude (m)", "Speed (\(u))", "Speed (m/s)",
                        "Long accel (m/s²)", "Lat accel (m/s²)", "Long accel (g)", "Lat accel (g)", "Distance (m)",
                        "X east (m)", "Y north (m)", "Heading (°)", "GPS accuracy (m)", "Source"]
+            + (skip.enabled ? ["Active time (s)", "In charts"] : [])
         data.set(0, headers.map { .t($0, .header) })
-        data.widths = [0: 23, 1: 11, 2: 13, 3: 13, 4: 11, 5: 11, 6: 11, 7: 14, 8: 14, 9: 12, 10: 12, 11: 12, 12: 11, 13: 11, 14: 11, 15: 14, 16: 8]
+        data.widths = [17: 14, 18: 10, 0: 23, 1: 11, 2: 13, 3: 13, 4: 11, 5: 11, 6: 11, 7: 14, 8: 14, 9: 12, 10: 12, 11: 12, 12: 11, 13: 11, 14: 11, 15: 14, 16: 8]
         let start = run.startDate.timeIntervalSince1970
         let tz = Double(TimeZone.current.secondsFromGMT(for: run.startDate))
         for (i, p) in s.enumerated() {
@@ -211,6 +243,10 @@ enum RunExcelExporter {
                 .n(p.distance, .dp2), .n(xy.x, .dp2), .n(xy.y, .dp2),
                 .n(p.heading, .dp1), .n(p.hAcc, .dp1), .t(p.fused ? "fused" : "gps"),
             ])
+            if skip.enabled {
+                data.set(i + 1, 17, .n(idle.activeT[i], .dp3))
+                data.set(i + 1, 18, .t(idle.kept[i] ? "yes" : "skipped"))
+            }
         }
 
         // MARK: GPS fixes

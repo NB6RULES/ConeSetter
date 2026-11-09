@@ -33,7 +33,10 @@ final class FusionEngine {
     let useIMU: Bool
     private(set) var samples: [SpeedSample] = []
     private(set) var fixes: [GPSFix] = []
+    private(set) var baro: [BaroSample] = []
     private(set) var state: IMUState
+    private(set) var liveAltitude: Double?
+    private var baroOffset: Double?
 
     // Live outputs
     private(set) var liveSpeed: Double = 0
@@ -71,7 +74,20 @@ final class FusionEngine {
     private var prevSpeedFix: (t: Double, v: Double)?
     private var gpsSpeed: (t: Double, v: Double)?
 
-    static let calibrationTarget = 6.0
+    // Raw IMU stream kept for the offline (whole-run) re-fusion in finalize().
+    private struct IMURecord {
+        var t: Double
+        var dt: Float
+        var hx: Float
+        var hy: Float
+        var yaw: Float
+        var seg: Int32
+    }
+    private var records: [IMURecord] = []
+    private var segment = 0
+    private var segmentForward: [Int: SIMD2<Double>] = [:]
+
+    static let calibrationTarget = 8.0
     private let emitInterval = 0.1
 
     init(useIMU: Bool) {
@@ -132,6 +148,10 @@ final class FusionEngine {
         let h = SIMD2<Double>(simd_dot(a3, e1), simd_dot(a3, e2))
         let yawRate = simd_dot(rotationRate, up)
         let vNow = forward != nil ? vF : currentGPSSpeed(at: t)
+        if step > 0 {
+            records.append(IMURecord(t: t, dt: Float(step), hx: Float(h.x), hy: Float(h.y),
+                                     yaw: Float(yawRate), seg: Int32(segment)))
+        }
 
         // Lateral calibration rows, averaged over 0.1 s windows.
         latWinH += h * step
@@ -182,6 +202,18 @@ final class FusionEngine {
         }
     }
 
+    // MARK: - Barometer input
+
+    /// - Parameters:
+    ///   - t: seconds since the run started
+    ///   - rel: barometric altitude change since the altimeter started, metres
+    func addBaro(t: Double, rel: Double) {
+        guard rel.isFinite else { return }
+        if let last = baro.last, t <= last.t { return }
+        baro.append(BaroSample(t: t, rel: rel))
+        if let off = baroOffset { liveAltitude = off + rel }
+    }
+
     // MARK: - GPS input
 
     /// - Parameters:
@@ -201,6 +233,13 @@ final class FusionEngine {
             }
         }
         fixes.append(fix)
+        if let b = baro.last, fix.vAcc >= 0, fix.vAcc < 30 {
+            let est = fix.alt - b.rel
+            baroOffset = baroOffset.map { $0 + (est - $0) * 0.1 } ?? est
+            liveAltitude = (baroOffset ?? est) + b.rel
+        } else if baro.isEmpty {
+            liveAltitude = fix.alt
+        }
         guard let vg = v else {
             if !useIMU || lastMotionT == nil { emitGPSSample(fix, speed: currentGPSSpeed(at: fix.t)) }
             return
@@ -264,6 +303,8 @@ final class FusionEngine {
     }
 
     private func resetCalibration() {
+        if let f = forward { segmentForward[segment] = f }
+        segment += 1
         normal = simd_double2x2(0)
         rhs = .zero
         longExcitation = 0
@@ -291,7 +332,7 @@ final class FusionEngine {
         if forward == nil {
             state = .calibrating(min(0.99, excitation / Self.calibrationTarget))
         }
-        guard excitation >= Self.calibrationTarget, longExcitation >= 2 else { return }
+        guard excitation >= Self.calibrationTarget, longExcitation >= 3 else { return }
 
         let trace = normal[0][0] + normal[1][1]
         guard trace > 0 else { return }
@@ -303,9 +344,15 @@ final class FusionEngine {
         guard n > 0.7, n < 1.3 else { return }
 
         let wasNil = forward == nil
-        forward = f / n
+        let fu = f / n
+        forward = fu
         if wasNil {
-            vF = gpsSpeed?.v ?? vF
+            // Start from the last GPS speed plus the IMU-integrated change since that fix.
+            if let g = gpsSpeed {
+                var dv = 0.0
+                for e in history where e.t > g.t { dv += simd_dot(e.h, fu) * e.dt }
+                vF = max(0, g.v + dv)
+            }
             bias = 0
             longLP = 0
         }
@@ -359,12 +406,92 @@ final class FusionEngine {
     /// Fills in GPS-only stretches, interpolates positions between fixes (weighted by
     /// distance travelled), recomputes distance and derives any missing accelerations.
     func finalize() -> [SpeedSample] {
-        RunPostProcessor.process(samples: samples, fixes: fixes)
+        if let f = forward { segmentForward[segment] = f }
+        var s = samples
+        if useIMU, !segmentForward.isEmpty { refineOffline(&s) }
+        return RunPostProcessor.process(samples: s, fixes: fixes, baro: baro)
+    }
+
+    /// Whole-run re-fusion with the final forward axis of each calibration segment:
+    /// v(t) = ∫IMU + e(t), where e is the GPS − IMU difference at each fix, interpolated
+    /// linearly between fixes. Keeps the IMU's 10 Hz shape (launches!) and GPS's level.
+    private func refineOffline(_ s: inout [SpeedSample]) {
+        for i in s.indices { s[i].fused = false }
+        var gT: [Double] = [], gV: [Double] = []
+        for (i, f) in fixes.enumerated() {
+            if f.hasSpeed {
+                gT.append(f.t); gV.append(f.speed)
+            } else if i > 0 {
+                let p = fixes[i - 1], dt = f.t - p.t
+                if dt > 0.2 { gT.append(f.t); gV.append(Geo.haversine(p.lat, p.lon, f.lat, f.lon) / dt) }
+            }
+        }
+        guard gT.count >= 2, !records.isEmpty else { return }
+        let interp = RunPostProcessor.interp
+
+        var start = 0
+        while start < records.count {
+            let seg = records[start].seg
+            var end = start
+            while end + 1 < records.count && records[end + 1].seg == seg { end += 1 }
+            let next = end + 1
+            defer { start = next }
+            guard let f = segmentForward[Int(seg)] else { continue }
+
+            let n = end - start + 1
+            var tr = [Double](repeating: 0, count: n)
+            var vi = [Double](repeating: 0, count: n)
+            var ps = [Double](repeating: 0, count: n)
+            var accV = 0.0, accP = 0.0
+            for k in 0..<n {
+                let r = records[start + k]
+                let dt = Double(r.dt)
+                accV += (Double(r.hx) * f.x + Double(r.hy) * f.y) * dt
+                accP += Double(r.yaw) * dt
+                tr[k] = r.t; vi[k] = accV; ps[k] = accP
+            }
+            let t0 = tr[0], t1 = tr[n - 1]
+
+            var eT: [Double] = [], eV: [Double] = [], eG: [Double] = []
+            for j in gT.indices where gT[j] >= t0 && gT[j] <= t1 {
+                eT.append(gT[j]); eG.append(gV[j]); eV.append(gV[j] - interp(tr, vi, gT[j]))
+            }
+            guard eT.count >= 2 else { continue }
+
+            // A wrong forward axis shows up as a large, persistent GPS correction slope.
+            var slopes: [Double] = []
+            for j in 1..<eT.count where eT[j] > eT[j - 1] {
+                slopes.append(abs((eV[j] - eV[j - 1]) / (eT[j] - eT[j - 1])))
+            }
+            slopes.sort()
+            if !slopes.isEmpty && slopes[slopes.count / 2] > 1.0 { continue }
+
+            let lo = max(t0, eT[0]) - 0.5, hi = min(t1, eT[eT.count - 1]) + 0.5
+            let w = 0.1
+            for i in s.indices where s[i].t >= lo && s[i].t <= hi {
+                let t = s[i].t
+                var j = 0, k = eT.count - 1
+                if t <= eT[0] { k = 0 } else if t >= eT[eT.count - 1] { j = eT.count - 1 } else {
+                    while k - j > 1 { let m = (j + k) / 2; if eT[m] <= t { j = m } else { k = m } }
+                }
+                let slope = (k > j) ? (eV[k] - eV[j]) / (eT[k] - eT[j]) : 0
+                let stationary = eG[j] < 0.25 && eG[k] < 0.25
+                var v = interp(tr, vi, t) + interp(eT, eV, t)
+                var a = (interp(tr, vi, t + w) - interp(tr, vi, t - w)) / (2 * w) + slope
+                if stationary { v = 0; a = 0 }
+                v = max(0, v)
+                let yaw = (interp(tr, ps, t + w) - interp(tr, ps, t - w)) / (2 * w)
+                s[i].speed = v
+                s[i].longAccel = a
+                s[i].latAccel = v * yaw
+                s[i].fused = true
+            }
+        }
     }
 }
 
 enum RunPostProcessor {
-    static func process(samples input: [SpeedSample], fixes: [GPSFix]) -> [SpeedSample] {
+    static func process(samples input: [SpeedSample], fixes: [GPSFix], baro: [BaroSample] = []) -> [SpeedSample] {
         var s = input.sorted { $0.t < $1.t }
         guard !s.isEmpty, !fixes.isEmpty else { return s }
 
@@ -501,7 +628,29 @@ enum RunPostProcessor {
                 }
             }
         }
+
+        applyElevation(&s, fixes: fixes, baro: baro)
         return s
+    }
+
+    /// Elevation: barometer (smooth, ~0.1 m resolution) anchored to the median GPS altitude;
+    /// without a barometer, GPS altitude smoothed over ±2 fixes.
+    static func applyElevation(_ s: inout [SpeedSample], fixes: [GPSFix], baro: [BaroSample]) {
+        guard !s.isEmpty, !fixes.isEmpty else { return }
+        if baro.count >= 2 {
+            let bt = baro.map(\.t), br = baro.map(\.rel)
+            let good = fixes.filter { $0.vAcc >= 0 && $0.vAcc < 30 }
+            let use = good.isEmpty ? fixes : good
+            var offsets = use.map { $0.alt - interp(bt, br, $0.t) }.sorted()
+            if offsets.isEmpty { offsets = [0] }
+            let offset = offsets[offsets.count / 2]
+            for i in s.indices { s[i].alt = offset + interp(bt, br, s[i].t) }
+        } else {
+            let ft = fixes.map(\.t)
+            let fa = fixes.map(\.alt)
+            let smooth = RunAnalysis.movingAverage(fa, 5)
+            for i in s.indices { s[i].alt = interp(ft, smooth, s[i].t) }
+        }
     }
 
     private static func set(_ s: inout SpeedSample, from f: GPSFix) {

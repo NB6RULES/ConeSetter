@@ -45,6 +45,12 @@ struct GPSFix: Codable, Equatable {
     var hasCourse: Bool { course >= 0 && courseAcc >= 0 && courseAcc < 45 }
 }
 
+/// Barometric relative altitude (Core Motion altimeter), metres since recording started.
+struct BaroSample: Codable, Equatable {
+    var t: Double
+    var rel: Double
+}
+
 struct SpeedRun: Codable, Identifiable, Equatable {
     var id: UUID
     var name: String
@@ -53,6 +59,9 @@ struct SpeedRun: Codable, Identifiable, Equatable {
     var fixes: [GPSFix]
     var imuUsed: Bool
     var notes: String = ""
+    var baro: [BaroSample]? = nil
+
+    var hasBarometer: Bool { (baro?.count ?? 0) > 1 }
 
     var duration: Double { max(samples.last?.t ?? 0, fixes.last?.t ?? 0) }
 }
