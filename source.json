@@ -23,6 +23,15 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "1.1.0",
+          "buildVersion": "5",
+          "date": "2026-11-09T02:26:39Z",
+          "localizedDescription": "Speed tab: GPS+IMU speed logger, heatmap path, graphs, elevation, skip stops, Excel export",
+          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.1.0-b5/ConeSetter.ipa",
+          "size": 867161,
+          "minOSVersion": "18.0"
+        },
+        {
           "version": "1.0.0",
           "buildVersion": "1",
           "date": "2026-11-08T18:59:03Z",
@@ -39,11 +48,11 @@
           "NSLocationWhenInUseUsageDescription": "Cone Setter tags saved track layouts with the site location so you can find them again."
         }
       },
-      "version": "1.0.0",
-      "versionDate": "2026-11-08T18:59:03Z",
-      "versionDescription": "Cone Setter: AR + LiDAR cone placement for FS test tracks",
-      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.0.0-b1/ConeSetter.ipa",
-      "size": 522371
+      "version": "1.1.0",
+      "versionDate": "2026-11-09T02:26:39Z",
+      "versionDescription": "Speed tab: GPS+IMU speed logger, heatmap path, graphs, elevation, skip stops, Excel export",
+      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.1.0-b5/ConeSetter.ipa",
+      "size": 867161
     }
   ],
   "news": []
