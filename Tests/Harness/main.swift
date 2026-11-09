@@ -267,8 +267,12 @@ func evaluate(_ name: String, _ r: SimResult, expectFused: Bool) {
     }
     print(String(format: "  elevation RMS err %.2f m  climb %.1f m (truth %.1f)  range %.1f–%.1f m  baro %@",
                  rms(ez), st.climb, truthClimb, st.minElevation ?? .nan, st.maxElevation ?? .nan, r.run.hasBarometer ? "yes" : "no"))
+    let offset = ez.reduce(0, +) / Double(max(ez.count, 1))
+    let shape = ez.map { $0 - offset }
+    print(String(format: "  elevation shape RMS err %.2f m, absolute offset %+.2f m (GPS-limited)", rms(shape), offset))
     if r.run.hasBarometer {
-        check(rms(ez) < 1.2, "barometric elevation RMS error < 1.2 m")
+        check(rms(shape) < 0.4, "barometric elevation shape RMS error < 0.4 m")
+        check(abs(offset) < 4, "absolute elevation within GPS error (< 4 m)")
         check(abs(st.climb - truthClimb) < 0.3 * truthClimb + 1, "total climb within 30%")
     } else {
         check(rms(ez) < 4, "GPS elevation RMS error < 4 m")

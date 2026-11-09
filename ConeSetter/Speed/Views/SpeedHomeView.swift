@@ -144,7 +144,7 @@ struct SpeedHomeView: View {
             StatTile(title: "Long", value: String(format: "%+.2f", rec.longAccel / Geo.g), unit: "g",
                      tint: rec.longAccel >= 0 ? .green : .red)
             StatTile(title: "Lateral", value: String(format: "%+.2f", rec.latAccel / Geo.g), unit: "g")
-            StatTile(title: "Time", value: RunAnalysis.formatDuration(rec.elapsed))
+            StatTile(title: "Elevation", value: rec.altitude.map { String(format: "%.0f", $0) } ?? "–", unit: rec.altitude == nil ? "" : "m")
         }
         .listRowBackground(Color.clear)
         .listRowInsets(EdgeInsets())
