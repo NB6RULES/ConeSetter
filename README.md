@@ -26,6 +26,18 @@ The top-left chips show tracking state, LiDAR mapping, phone GPS accuracy, and t
 
 Sessions save the progress, the ARKit world map and a GPS site tag. On a later test day, open the session and walk around: if the saved map is recognised, it carries on; otherwise tap A and B again and it restores the cones you already placed.
 
+## Speed tab (speed logger)
+
+Records the car's speed with timestamps and coordinates, and keeps running with the screen locked.
+
+- **Sensors:** GPS (about 1 Hz) is fused with the IMU (100 Hz) into a **10 Hz** trace, and the barometer gives elevation. Mount the phone firmly in any orientation. The app learns which way is forward from the first launch, braking or corners. When a run stops, the whole run is fused again with the final calibration, so the launch is captured too. If the phone moves or the IMU isn't used, the app falls back to GPS only.
+- **Run view:** satellite map with a heatmap path (blue = slow, red = top speed), top / average / moving-average speed, distance, duration, max acceleration, braking and lateral g, 0–100 km/h, 75 m from launch with trap speed, elevation range and climb/descent. Graphs show speed (by time or distance), acceleration (longitudinal and lateral) and elevation. Drag on a graph to see that moment on the map.
+- **Skip stops:** hides stationary periods so the graphs close up, with dashed markers where time was cut. **Advanced** sets the speed below which data is skipped, the minimum stop length, and the time kept either side.
+- **Excel export (.xlsx):** a Summary sheet with stats plus track and graph images, a Charts sheet with native editable charts (speed, acceleration, speed vs distance, elevation, and the track map coloured by speed band), every sample on the Data sheet, raw GPS fixes, and the series behind the charts. CSV and GPX exports are also available.
+- Runs autosave every 30 s. A run cut off by the app closing is recovered the next time the Speed tab opens.
+
+CI runs `Tests/Harness/main.swift`, which simulates laps with noisy GPS, IMU and barometer and an arbitrary phone mount, before every build. Its outputs, including a sample Excel export, are attached to the `ci-test` pre-release.
+
 ## CSV format
 
 One cone per row, comma / semicolon / tab separated, metres, `x` forward and `y` left:
