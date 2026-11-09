@@ -42,6 +42,8 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
     @Published private(set) var targetID: Int?
     @Published private(set) var hud = HUDState()
     @Published private(set) var toast: String?
+    /// true while ARKit is still trying to recognise the saved map of a resumed session.
+    @Published private(set) var waitingForMap = false
     @Published var settings: PlacementSettings {
         didSet { settingsDidChange(from: oldValue) }
     }
@@ -50,6 +52,7 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
     private var refAAnchor: UUID?
     private var refBAnchor: UUID?
     private var anchorPositions: [UUID: SIMD3<Float>] = [:]
+    private var anchorObjects: [UUID: ARAnchor] = [:]
     private var history: [Int] = []
     private var frameCounter = 0
     private var groundHit: SIMD3<Float>?
@@ -131,6 +134,18 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
     // MARK: - Lifecycle
 
     func start() {
+        let first = !started
+        runSession(map: first ? pendingWorldMap : nil, reset: first)
+        started = true
+        applyViewOptions()
+        LocationService.shared.start()
+        if first, isResuming, pendingWorldMap != nil {
+            waitingForMap = true
+            show("Looking for the saved map — walk around where you started last time")
+        }
+    }
+
+    private func runSession(map: ARWorldMap?, reset: Bool) {
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal]
         config.environmentTexturing = .none
@@ -138,17 +153,29 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
             config.sceneReconstruction = .mesh
             hud.hasLiDAR = true
         }
-        if !started, let map = pendingWorldMap {
-            config.initialWorldMap = map
-        }
-        let options: ARSession.RunOptions = started ? [] : [.resetTracking, .removeExistingAnchors]
-        arView.session.run(config, options: options)
-        started = true
-        applyViewOptions()
-        LocationService.shared.start()
-        if isResuming, pendingWorldMap != nil {
-            show("Looking for the saved map — walk around the start area, or just tap A and B again")
-        }
+        config.initialWorldMap = map
+        arView.session.run(config, options: reset ? [.resetTracking, .removeExistingAnchors] : [])
+    }
+
+    /// Gives up on the saved AR map: restarts tracking from scratch so A and B can be tapped
+    /// again. Cones placed earlier are restored from their saved layout positions.
+    func startWithoutSavedMap() {
+        dropMapAnchors()
+        pendingWorldMap = nil
+        waitingForMap = false
+        runSession(map: nil, reset: true)
+        phase = .alignA
+        show("Starting fresh — set A and B again; placed cones will be restored")
+    }
+
+    private func dropMapAnchors() {
+        isResuming = false
+        refAAnchor = nil
+        refBAnchor = nil
+        for id in progress.keys { progress[id]?.anchorID = nil }
+        for a in anchorObjects.values { arView.session.remove(anchor: a) }
+        anchorObjects.removeAll()
+        anchorPositions.removeAll()
     }
 
     func pause() {
@@ -191,24 +218,28 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
             Haptics.error()
             return
         }
-        isResuming = false
+        if isResuming {
+            // Aligning by hand: anything loaded from the saved map is in an unknown frame.
+            dropMapAnchors()
+            waitingForMap = false
+        }
         let isA = phase == .alignA
-        let anchor = ARAnchor(name: isA ? "ref-A" : "ref-B", transform: simd_float4x4(translation: hit))
         if let old = isA ? refAAnchor : refBAnchor { removeAnchor(old) }
-        arView.session.add(anchor: anchor)
-        anchorPositions[anchor.identifier] = hit
+        let id = addAnchor(name: isA ? "ref-A" : "ref-B", at: hit)
         Haptics.tap()
 
         if isA {
-            refAAnchor = anchor.identifier
+            refAAnchor = id
             phase = .alignB
         } else {
-            refBAnchor = anchor.identifier
+            refBAnchor = id
             finishAlignment()
         }
     }
 
     func restartAlignment() {
+        if isResuming { dropMapAnchors() }
+        waitingForMap = false
         if let a = refAAnchor { removeAnchor(a) }
         if let b = refBAnchor { removeAnchor(b) }
         refAAnchor = nil
@@ -244,16 +275,14 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
         }
 
         if let old = progress[tid]?.anchorID { removeAnchor(old) }
-        let anchor = ARAnchor(name: "cone-\(tid)", transform: simd_float4x4(translation: p))
-        arView.session.add(anchor: anchor)
-        anchorPositions[anchor.identifier] = p
+        let anchorID = addAnchor(name: "cone-\(tid)", at: p)
 
         var pr = progress[tid] ?? ConeProgress()
         pr.status = .placed
-        pr.anchorID = anchor.identifier
+        pr.anchorID = anchorID
         pr.measuredLayout = global.inverse(p.ground2D)
         progress[tid] = pr
-        history.append(tid)
+        pushHistory(tid)
 
         if err * 100 <= settings.toleranceCM {
             Haptics.success()
@@ -267,9 +296,12 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
     func acceptAsPlanned() {
         guard phase == .placing, let tid = targetID else { return }
         var pr = progress[tid] ?? ConeProgress()
+        if let old = pr.anchorID { removeAnchor(old) }
+        pr.anchorID = nil
+        pr.measuredLayout = nil
         pr.status = .accepted
         progress[tid] = pr
-        history.append(tid)
+        pushHistory(tid)
         Haptics.tap()
         advance()
     }
@@ -277,10 +309,18 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
     func skip() {
         guard phase == .placing, let tid = targetID else { return }
         var pr = progress[tid] ?? ConeProgress()
+        if let old = pr.anchorID { removeAnchor(old) }
+        pr.anchorID = nil
+        pr.measuredLayout = nil
         pr.status = .skipped
         progress[tid] = pr
-        history.append(tid)
+        pushHistory(tid)
         advance()
+    }
+
+    private func pushHistory(_ id: Int) {
+        history.removeAll { $0 == id }
+        history.append(id)
     }
 
     func undo() {
@@ -382,6 +422,16 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
         } else {
             crosshairDot.isEnabled = false
         }
+        if isResuming, h.trackingGood, phase == .alignA || phase == .alignB,
+           refAPosition != nil, refBPosition != nil {
+            isResuming = false
+            waitingForMap = false
+            restoreMissingConeAnchors()
+            show("Found the saved map — carry on placing")
+            Haptics.success()
+            phase = .placing
+            advance()
+        }
         updateRefMarkers()
 
         switch phase {
@@ -472,6 +522,7 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
         for a in anchors {
             guard let name = a.name else { continue }
             anchorPositions[a.identifier] = a.transform.position
+            anchorObjects[a.identifier] = a
             guard isResuming else { continue }
             if name == "ref-A", refAAnchor == nil {
                 refAAnchor = a.identifier
@@ -482,13 +533,7 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
                 progress[id]?.anchorID = a.identifier
             }
         }
-        if isResuming, phase == .alignA || phase == .alignB, refAAnchor != nil, refBAnchor != nil {
-            isResuming = false
-            show("Found the saved map — carry on placing")
-            Haptics.success()
-            phase = .placing
-            advance()
-        }
+        // The switch to placing happens in handleFrame once tracking has relocalised.
     }
 
     // MARK: - Alignment & fitting
@@ -508,21 +553,32 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
             Haptics.success()
         }
 
-        // Re-create anchors for cones placed in an earlier session.
-        if let base = baselineFit() {
-            for (id, pr) in progress where pr.status == .placed && pr.anchorID == nil {
-                guard let m = pr.measuredLayout else { continue }
-                let w2 = base.apply(m)
-                let p = worldPoint(w2, height: interpolatedHeight(at: w2))
-                let anchor = ARAnchor(name: "cone-\(id)", transform: simd_float4x4(translation: p))
-                arView.session.add(anchor: anchor)
-                anchorPositions[anchor.identifier] = p
-                progress[id]?.anchorID = anchor.identifier
-            }
-        }
-
+        restoreMissingConeAnchors()
         phase = .placing
         advance()
+    }
+
+    /// Re-creates anchors for cones placed in an earlier session from their saved positions.
+    private func restoreMissingConeAnchors() {
+        guard let base = baselineFit() else { return }
+        for (id, pr) in progress where pr.status == .placed && pr.anchorID == nil {
+            guard let m = pr.measuredLayout else {
+                progress[id]?.status = .accepted
+                continue
+            }
+            let w2 = base.apply(m)
+            let p = worldPoint(w2, height: interpolatedHeight(at: w2))
+            progress[id]?.anchorID = addAnchor(name: "cone-\(id)", at: p)
+        }
+    }
+
+    @discardableResult
+    private func addAnchor(name: String, at p: SIMD3<Float>) -> UUID {
+        let anchor = ARAnchor(name: name, transform: simd_float4x4(translation: p))
+        arView.session.add(anchor: anchor)
+        anchorPositions[anchor.identifier] = p
+        anchorObjects[anchor.identifier] = anchor
+        return anchor.identifier
     }
 
     private func baselineFit() -> Transform2D? {
@@ -751,9 +807,10 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
     }
 
     private func removeAnchor(_ id: UUID) {
-        if let anchor = arView.session.currentFrame?.anchors.first(where: { $0.identifier == id }) {
+        if let anchor = anchorObjects[id] ?? arView.session.currentFrame?.anchors.first(where: { $0.identifier == id }) {
             arView.session.remove(anchor: anchor)
         }
+        anchorObjects.removeValue(forKey: id)
         anchorPositions.removeValue(forKey: id)
     }
 

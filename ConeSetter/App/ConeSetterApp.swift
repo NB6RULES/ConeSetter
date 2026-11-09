@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct ConeSetterApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
             TabView {
@@ -10,7 +12,12 @@ struct ConeSetterApp: App {
                 SpeedHomeView()
                     .tabItem { Label("Speed", systemImage: "speedometer") }
             }
-            .tint(.orange)
+            .tint(Theme.accent)
+            .preferredColorScheme(.dark)
+            .task { UpdateChecker.shared.checkIfDue() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { UpdateChecker.shared.checkIfDue() }
+            }
         }
     }
 }

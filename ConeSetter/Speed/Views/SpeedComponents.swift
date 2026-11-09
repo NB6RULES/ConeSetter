@@ -37,41 +37,91 @@ struct SpeedGauge: View {
     var unit: SpeedUnit
     var maxScale: Double
     var active: Bool
+    /// Top speed so far in display units (shown as a marker on the dial).
+    var peak: Double = 0
+
+    private let size: CGFloat = 264
+    private let line: CGFloat = 16
 
     var body: some View {
         let frac = min(max(speed / max(maxScale, 1), 0), 1)
+        let peakFrac = min(max(peak / max(maxScale, 1), 0), 1)
+        let glow = Heat.color(frac)
+        let radius = size / 2 - line / 2
         ZStack {
+            // Dial face
+            Circle()
+                .fill(RadialGradient(colors: [Theme.surfaceHigh, Color.black.opacity(0.6)],
+                                     center: .center, startRadius: 10, endRadius: size / 2))
+                .padding(line + 6)
+
+            // Track and live arc
             Circle()
                 .trim(from: 0, to: 0.75)
-                .stroke(Color.secondary.opacity(0.18), style: StrokeStyle(lineWidth: 18, lineCap: .round))
+                .stroke(Color.white.opacity(0.09), style: StrokeStyle(lineWidth: line, lineCap: .round))
                 .rotationEffect(.degrees(135))
+                .padding(line / 2)
             Circle()
-                .trim(from: 0, to: 0.75 * frac)
+                .trim(from: 0, to: max(0.0015, 0.75 * frac))
                 .stroke(AngularGradient(gradient: Heat.gradient, center: .center,
                                         startAngle: .degrees(0), endAngle: .degrees(270)),
-                        style: StrokeStyle(lineWidth: 18, lineCap: .round))
+                        style: StrokeStyle(lineWidth: line, lineCap: .round))
                 .rotationEffect(.degrees(135))
-                .animation(.easeOut(duration: 0.15), value: frac)
+                .padding(line / 2)
+                .shadow(color: glow.opacity(active ? 0.75 : 0.3), radius: active ? 12 : 5)
+                .animation(.easeOut(duration: 0.18), value: frac)
+
+            // Tick marks
+            ForEach(0..<41) { i in
+                let major = i % 5 == 0
+                Capsule()
+                    .fill(Color.white.opacity(major ? 0.75 : 0.28))
+                    .frame(width: major ? 2.5 : 1.5, height: major ? 11 : 6)
+                    .offset(y: -(radius - line / 2 - (major ? 11 : 8)))
+                    .rotationEffect(.degrees(225 + 270 * Double(i) / 40))
+            }
+
+            // Scale labels
             ForEach(0..<5) { i in
                 let v = maxScale * Double(i) / 4
                 let angle = (135 + 270 * Double(i) / 4) * Double.pi / 180
+                let r = Double(radius - line / 2) - 32
                 Text("\(Int(v))")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .offset(x: cos(angle) * 82, y: sin(angle) * 82)
-            }
-            VStack(spacing: -4) {
-                Text("\(Int(speed.rounded()))")
-                    .font(.system(size: 76, weight: .bold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .offset(x: cos(angle) * r, y: sin(angle) * r)
+            }
+
+            // Peak marker
+            if peak > 0.5 {
+                Image(systemName: "arrowtriangle.down.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.white)
+                    .offset(y: -(size / 2 + 2))
+                    .rotationEffect(.degrees(225 + 270 * peakFrac))
+                    .animation(.easeOut(duration: 0.2), value: peakFrac)
+            }
+
+            VStack(spacing: -6) {
+                Text("\(Int(speed.rounded()))")
+                    .font(.system(size: 78, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
                     .contentTransition(.numericText())
-                    .foregroundStyle(active ? .primary : .secondary)
-                Text(unit.label)
-                    .font(.headline)
+                    .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                    .shadow(color: active ? glow.opacity(0.5) : .clear, radius: 14)
+                    .frame(width: 150)
+                Text(unit.label.uppercased())
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .tracking(2)
                     .foregroundStyle(.secondary)
             }
+            .offset(y: 4)
         }
-        .frame(width: 210, height: 210)
+        .frame(width: size, height: size)
+        .padding(.top, 8)
     }
 
     static func scale(for top: Double, unit: SpeedUnit) -> Double {
@@ -82,23 +132,94 @@ struct SpeedGauge: View {
     }
 }
 
+/// Friction-circle style g-meter: the dot shows the direction and size of acceleration
+/// (up = speeding up, down = braking, left/right = cornering).
+struct GForceDial: View {
+    var longG: Double
+    var latG: Double
+    var maxG: Double = 1.5
+
+    var body: some View {
+        GeometryReader { geo in
+            let r = min(geo.size.width, geo.size.height) / 2
+            let total = (longG * longG + latG * latG).squareRoot()
+            let scale = total > maxG ? maxG / total : 1
+            let x = -latG * scale / maxG * Double(r - 8)
+            let y = -longG * scale / maxG * Double(r - 8)
+            ZStack {
+                Circle().fill(Color.black.opacity(0.35))
+                Circle().stroke(Color.white.opacity(0.25), lineWidth: 1)
+                Circle().stroke(Color.white.opacity(0.14), lineWidth: 1).padding(r / 3)
+                Circle().stroke(Color.white.opacity(0.14), lineWidth: 1).padding(r * 2 / 3)
+                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1)
+                Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+                Circle()
+                    .fill(Heat.color(min(total / maxG, 1)))
+                    .frame(width: 16, height: 16)
+                    .overlay(Circle().stroke(.white, lineWidth: 2))
+                    .shadow(color: Heat.color(min(total / maxG, 1)).opacity(0.9), radius: 8)
+                    .offset(x: x, y: y)
+                    .animation(.easeOut(duration: 0.12), value: x)
+                    .animation(.easeOut(duration: 0.12), value: y)
+                VStack {
+                    Spacer()
+                    Text(String(format: "%.2f g", total))
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(.bottom, 6)
+                }
+            }
+            .clipShape(Circle())
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+}
+
 struct StatTile: View {
     var title: String
     var value: String
     var unit: String = ""
     var tint: Color = .primary
+    var icon: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 5) {
+                if let icon { Image(systemName: icon).font(.caption2).foregroundStyle(Theme.accent) }
+                Text(title).font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+            }
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value).font(.title3.weight(.semibold)).monospacedDigit().foregroundStyle(tint)
+                Text(value)
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .contentTransition(.numericText())
                 if !unit.isEmpty { Text(unit).font(.caption).foregroundStyle(.secondary) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+    }
+}
+
+/// Pulsing dot used on the record button.
+struct PulsingDot: View {
+    @State private var on = false
+
+    var body: some View {
+        Circle()
+            .fill(.white)
+            .frame(width: 10, height: 10)
+            .opacity(on ? 1 : 0.25)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) { on = true }
+            }
     }
 }
 
@@ -142,6 +263,19 @@ enum HeatPath {
         let side = max(rect.width, rect.height, minSide)
         let padded = MKMapRect(x: rect.midX - side * 0.6, y: rect.midY - side * 0.6, width: side * 1.2, height: side * 1.2)
         return .rect(padded)
+    }
+}
+
+/// Live trail map. Equatable so the 10 Hz gauge refresh doesn't redraw the map; it only
+/// updates when a new GPS point arrives.
+struct LiveTrailMap: View, Equatable {
+    var trail: [TrailPoint]
+
+    static func == (a: LiveTrailMap, b: LiveTrailMap) -> Bool { a.trail.count == b.trail.count }
+
+    var body: some View {
+        HeatmapMap(coords: trail.map(\.coordinate), speeds: trail.map(\.speed),
+                   top: max(trail.map(\.speed).max() ?? 1, 1), followUser: true)
     }
 }
 

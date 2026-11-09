@@ -85,9 +85,15 @@ struct LayoutSetupView: View {
                 Text("Check dimensions against the current FS / FS-AI rules and handbook before a real test.")
             }
         }
+        .themedList()
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle(name.isEmpty ? "Layout" : name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { hideKeyboard() }.fontWeight(.semibold)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     let url = FileManager.default.temporaryDirectory

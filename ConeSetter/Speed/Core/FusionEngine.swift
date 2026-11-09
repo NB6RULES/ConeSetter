@@ -49,6 +49,7 @@ final class FusionEngine {
     private var gravityWarmup: [SIMD3<Double>] = []
     private var gRef: SIMD3<Double>?
     private var gLP: SIMD3<Double>?
+    private var tiltedFor = 0.0
     private var e1 = SIMD3<Double>(1, 0, 0)
     private var e2 = SIMD3<Double>(0, 1, 0)
 
@@ -132,11 +133,17 @@ final class FusionEngine {
             return
         }
 
-        // Detect the phone being moved relative to the car.
+        // Detect the phone being moved relative to the car. Core Motion's gravity estimate
+        // leans over during long hard corners or braking, so a modest tilt only counts when
+        // the car is (nearly) stopped — which is also the only time a phone gets re-mounted.
         let lpAlpha = step / (1.0 + step)
         let lp = simd_normalize((gLP ?? ref) * (1 - lpAlpha) + gUnit * lpAlpha)
         gLP = lp
-        if simd_dot(lp, ref) < cos(20.0 * .pi / 180) {
+        let tiltCos = simd_dot(lp, ref)
+        let slow = (gpsSpeed?.v ?? 0) < 2
+        if slow && tiltCos < cos(20.0 * .pi / 180) { tiltedFor += step } else { tiltedFor = 0 }
+        if tiltedFor > 3 || tiltCos < cos(55.0 * .pi / 180) {
+            tiltedFor = 0
             setBasis(lp)
             resetCalibration()
             state = .moved
@@ -329,7 +336,7 @@ final class FusionEngine {
 
     private func solveCalibration() {
         let excitation = longExcitation + latExcitation
-        if forward == nil {
+        if forward == nil, !(state == .moved && excitation < 0.5) {
             state = .calibrating(min(0.99, excitation / Self.calibrationTarget))
         }
         guard excitation >= Self.calibrationTarget, longExcitation >= 3 else { return }

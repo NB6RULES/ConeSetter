@@ -1,5 +1,7 @@
 import Foundation
 
+private let checkpointQueue = DispatchQueue(label: "conesetter.checkpoint", qos: .utility)
+
 struct RunSummary: Codable, Identifiable, Hashable {
     var id: UUID
     var name: String
@@ -84,9 +86,12 @@ final class RunStore: ObservableObject {
 
     nonisolated var checkpointURL: URL { dir.appendingPathComponent("in-progress.checkpoint") }
 
+    /// Checkpoint writes and clears run in order on one queue, so a write that was still
+    /// in flight can never land after the run has been saved and the checkpoint cleared.
+
     nonisolated func writeCheckpoint(_ run: SpeedRun) {
         let url = checkpointURL
-        Task.detached(priority: .utility) {
+        checkpointQueue.async {
             if let data = try? RunStore.encoder.encode(run) {
                 try? data.write(to: url, options: .atomic)
             }
@@ -94,7 +99,10 @@ final class RunStore: ObservableObject {
     }
 
     nonisolated func clearCheckpoint() {
-        try? FileManager.default.removeItem(at: checkpointURL)
+        let url = checkpointURL
+        checkpointQueue.sync {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     /// Turns a checkpoint left behind by a crash or a killed app into a saved run.
