@@ -23,6 +23,7 @@ struct ARPlacementView: View {
 
             VStack(spacing: 10) {
                 topBar
+                progressBar
                 HStack(alignment: .top) {
                     statusColumn
                     Spacer()
@@ -35,8 +36,9 @@ struct ARPlacementView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .transition(.opacity)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.14), lineWidth: 1))
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 bottomPanel
             }
@@ -50,7 +52,7 @@ struct ARPlacementView: View {
         }
         .onDisappear {
             ctrl.pause()
-            UIApplication.shared.isIdleTimerDisabled = false
+            UIApplication.shared.isIdleTimerDisabled = SpeedRecorder.shared.isRecording
         }
         .sheet(isPresented: $showSettings) {
             PlacementSettingsView(settings: $ctrl.settings)
@@ -82,11 +84,13 @@ struct ARPlacementView: View {
             Text(ctrl.layout.name)
                 .font(.headline)
                 .lineLimit(1)
+                .shadow(color: .black.opacity(0.8), radius: 3)
             Spacer()
             Text("\(ctrl.doneCount)/\(ctrl.layout.cones.count)")
-                .font(.headline.monospacedDigit())
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .font(.system(.headline, design: .rounded).monospacedDigit().weight(.bold))
+                .contentTransition(.numericText())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
                 .background(.ultraThinMaterial, in: Capsule())
 
             Menu {
@@ -110,6 +114,21 @@ struct ARPlacementView: View {
             }
             .tint(.primary)
         }
+    }
+
+    private var progressBar: some View {
+        let total = max(ctrl.layout.cones.count, 1)
+        let frac = Double(ctrl.doneCount) / Double(total)
+        return GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.18))
+                Capsule().fill(Theme.accentGradient)
+                    .frame(width: max(6, geo.size.width * frac))
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: frac)
+            }
+        }
+        .frame(height: 5)
+        .shadow(color: .black.opacity(0.4), radius: 2)
     }
 
     private var statusColumn: some View {
@@ -151,7 +170,7 @@ struct ARPlacementView: View {
     private var bottomPanel: some View {
         switch ctrl.phase {
         case .alignA, .alignB:
-            alignPanel
+            if ctrl.waitingForMap { mapSearchPanel } else { alignPanel }
         case .placing:
             placingPanel
         case .finished:
@@ -159,14 +178,33 @@ struct ARPlacementView: View {
         }
     }
 
+    private var mapSearchPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                ProgressView().controlSize(.large)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Looking for the saved map").font(.headline)
+                    Text("Walk slowly around where you started last time, pointing the phone at the ground and nearby objects.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Button("Start fresh — set A and B again") { ctrl.startWithoutSavedMap() }
+                .buttonStyle(FilledButtonStyle(color: .gray))
+            Text("Starting fresh keeps your placed cones: they're restored from their saved positions once A and B are set.")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+        .panel()
+    }
+
     private var alignPanel: some View {
         let isA = ctrl.phase == .alignA
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(isA ? "A" : "B")
-                    .font(.title2.bold())
-                    .frame(width: 40, height: 40)
+                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .frame(width: 44, height: 44)
                     .background(isA ? Color.pink : Color.teal, in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 2))
                     .foregroundStyle(.white)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isA ? "Step 1 · Reference A" : "Step 2 · Reference B").font(.headline)
@@ -209,7 +247,7 @@ struct ARPlacementView: View {
                     if let d = ctrl.hud.distanceToTarget {
                         VStack(spacing: 2) {
                             DirectionArrow(bearing: ctrl.hud.bearing)
-                            Text(Fmt.distance(d)).font(.caption.monospacedDigit().weight(.semibold))
+                            Text(Fmt.distance(d)).font(.subheadline.monospacedDigit().weight(.bold))
                         }
                     }
                 }

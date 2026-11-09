@@ -131,7 +131,20 @@ struct AccelParams: Codable, Equatable {
 enum LayoutFactory {
     /// Figure of eight. Origin = crossing point of the two circles, +x = driving direction
     /// along the entry/exit lane, right circle (driven first, clockwise) at negative y.
-    static func skidpad(_ p: SkidpadParams) -> ConeLayout {
+    private static func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
+        v.isFinite ? min(max(v, lo), hi) : lo
+    }
+
+    static func skidpad(_ input: SkidpadParams) -> ConeLayout {
+        var p = input
+        p.innerDiameter = clamp(p.innerDiameter, 2, 100)
+        p.outerDiameter = clamp(p.outerDiameter, p.innerDiameter + 1, 120)
+        p.centreDistance = clamp(p.centreDistance, p.innerDiameter + 0.5, 150)
+        p.entryLength = clamp(p.entryLength, 0, 200)
+        p.exitLength = clamp(p.exitLength, 0, 200)
+        p.laneSpacing = clamp(p.laneSpacing, 1, 50)
+        p.innerCount = min(max(p.innerCount, 4), 60)
+        p.outerCount = min(max(p.outerCount, 4), 60)
         var cones: [PlannedCone] = []
         func add(_ x: Double, _ y: Double, _ c: ConeColor, _ g: String) {
             cones.append(PlannedCone(id: cones.count, x: x, y: y, color: c, group: g))
@@ -212,7 +225,13 @@ enum LayoutFactory {
     }
 
     /// Straight. Origin = centre of the start line, +x = driving direction.
-    static func acceleration(_ p: AccelParams) -> ConeLayout {
+    static func acceleration(_ input: AccelParams) -> ConeLayout {
+        var p = input
+        p.length = clamp(p.length, 5, 500)
+        p.width = clamp(p.width, 1, 30)
+        p.spacing = clamp(p.spacing, 1, 100)
+        p.stopLength = clamp(p.stopLength, 0, 500)
+        p.stopSpacing = clamp(p.stopSpacing, 1, 100)
         var cones: [PlannedCone] = []
         func add(_ x: Double, _ y: Double, _ c: ConeColor, _ g: String) {
             cones.append(PlannedCone(id: cones.count, x: x, y: y, color: c, group: g))

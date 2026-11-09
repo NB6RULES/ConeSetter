@@ -26,6 +26,7 @@ struct RunDetailView: View {
     @State private var renaming = false
     @State private var newName = ""
     @State private var confirmDelete = false
+    @State private var exportError: String?
 
     private var unit: SpeedUnit { SpeedUnit(rawValue: unitRaw) ?? .kmh }
 
@@ -88,6 +89,11 @@ struct RunDetailView: View {
                 dismiss()
             }
         }
+        .alert("Export failed", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
+        }
         .task { await load() }
         .onChange(of: unitRaw) { _, _ in rebuildSeries() }
         .onChange(of: skip) { _, _ in rebuildSeries() }
@@ -98,31 +104,31 @@ struct RunDetailView: View {
     private func content(_ run: SpeedRun, _ st: RunStats) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                hero(run, st)
+
                 VStack(alignment: .leading, spacing: 8) {
                     HeatmapMap(coords: mapCoords, speeds: mapSpeeds, top: st.topSpeed, marker: markerCoordinate)
                         .frame(height: 340)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
                     HeatLegend(top: st.topSpeed, unit: unit)
                         .padding(.horizontal, 4)
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    StatTile(title: "Top speed", value: String(format: "%.1f", unit.convert(st.topSpeed)), unit: unit.label, tint: Heat.color(1))
-                    StatTile(title: "Average speed", value: String(format: "%.1f", unit.convert(st.avgSpeed)), unit: unit.label)
-                    StatTile(title: "Distance", value: st.distance >= 1000 ? String(format: "%.2f", st.distance / 1000) : String(format: "%.0f", st.distance),
-                             unit: st.distance >= 1000 ? "km" : "m")
-                    StatTile(title: "Duration", value: RunAnalysis.formatDuration(st.duration))
+                    StatTile(title: "Average speed", value: String(format: "%.1f", unit.convert(st.avgSpeed)), unit: unit.label, icon: "equal.circle.fill")
+                    StatTile(title: "Top speed at", value: String(format: "%.1f", st.topSpeedTime), unit: "s", icon: "flame.fill")
                     StatTile(title: "Moving average", value: String(format: "%.1f", unit.convert(st.movingAvgSpeed)), unit: unit.label)
                     StatTile(title: "Moving time", value: RunAnalysis.formatDuration(st.movingTime))
-                    StatTile(title: "Max acceleration", value: String(format: "%.2f", st.maxAccel / Geo.g), unit: "g", tint: .green)
-                    StatTile(title: "Max braking", value: String(format: "%.2f", st.maxBraking / Geo.g), unit: "g", tint: .red)
-                    StatTile(title: "Max lateral", value: String(format: "%.2f", st.maxLateral / Geo.g), unit: "g")
+                    StatTile(title: "Max acceleration", value: String(format: "%.2f", st.maxAccel / Geo.g), unit: "g", tint: .green, icon: "arrow.up")
+                    StatTile(title: "Max braking", value: String(format: "%.2f", st.maxBraking / Geo.g), unit: "g", tint: .red, icon: "arrow.down")
+                    StatTile(title: "Max lateral", value: String(format: "%.2f", st.maxLateral / Geo.g), unit: "g", icon: "arrow.left.and.right")
                     StatTile(title: "0–100 km/h", value: st.zeroTo100.map { String(format: "%.2f", $0) } ?? "–", unit: st.zeroTo100 == nil ? "" : "s")
                     StatTile(title: "75 m from launch", value: st.best75m.map { String(format: "%.2f", $0) } ?? "–", unit: st.best75m == nil ? "" : "s")
                     StatTile(title: "75 m trap speed", value: st.best75mTrapSpeed.map { String(format: "%.1f", unit.convert($0)) } ?? "–",
                              unit: st.best75mTrapSpeed == nil ? "" : unit.label)
-                    StatTile(title: "Elevation range", value: elevationRange(st), unit: st.minElevation == nil ? "" : "m")
-                    StatTile(title: "Climb / descent", value: String(format: "+%.0f / −%.0f", st.climb, st.descent), unit: "m")
+                    StatTile(title: "Elevation range", value: elevationRange(st), unit: st.minElevation == nil ? "" : "m", icon: "mountain.2.fill")
+                    StatTile(title: "Climb / descent", value: String(format: "+%.0f / −%.0f", st.climb, st.descent), unit: "m", icon: "arrow.up.right")
                 }
 
                 skipCard
@@ -188,7 +194,46 @@ struct RunDetailView: View {
             }
             .padding()
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Theme.background.ignoresSafeArea())
+    }
+
+    /// Headline numbers: top speed, with distance and duration beside it.
+    private func hero(_ run: SpeedRun, _ st: RunStats) -> some View {
+        HStack(alignment: .bottom, spacing: 14) {
+            VStack(alignment: .leading, spacing: -2) {
+                Text("TOP SPEED")
+                    .font(.system(size: 11, weight: .bold, design: .rounded)).tracking(1.5)
+                    .opacity(0.85)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(String(format: "%.1f", unit.convert(st.topSpeed)))
+                        .font(.system(size: 54, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                    Text(unit.label).font(.headline).opacity(0.9)
+                }
+                Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption).opacity(0.85)
+                    .padding(.top, 4)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 8) {
+                heroFigure(st.distance >= 1000 ? String(format: "%.2f km", st.distance / 1000) : String(format: "%.0f m", st.distance), "Distance")
+                heroFigure(RunAnalysis.formatDuration(st.duration), "Duration")
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(18)
+        .frame(maxWidth: .infinity)
+        .background(Theme.accentGradient, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .shadow(color: Theme.accent.opacity(0.3), radius: 16, y: 8)
+    }
+
+    private func heroFigure(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            Text(value).font(.system(.title3, design: .rounded).weight(.bold)).monospacedDigit()
+            Text(label.uppercased()).font(.system(size: 9, weight: .bold, design: .rounded)).tracking(1.2).opacity(0.8)
+        }
     }
 
     private var skipCard: some View {
@@ -204,7 +249,7 @@ struct RunDetailView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            .tint(.orange)
+            .tint(Theme.accent)
 
             DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -213,7 +258,7 @@ struct RunDetailView: View {
                             Text("Skip when slower than")
                             Spacer()
                             Text(String(format: "%.1f %@", unit.convert(skipBelowMS), unit.label))
-                                .monospacedDigit().foregroundStyle(.orange)
+                                .monospacedDigit().foregroundStyle(Theme.accent)
                         }
                         Slider(value: Binding(get: { unit.convert(skipBelowMS) },
                                               set: { skipBelowMS = $0 / unit.factor }),
@@ -223,14 +268,14 @@ struct RunDetailView: View {
                         HStack {
                             Text("Only stops longer than")
                             Spacer()
-                            Text("\(Int(skipMinDuration)) s").monospacedDigit().foregroundStyle(.orange)
+                            Text("\(Int(skipMinDuration)) s").monospacedDigit().foregroundStyle(Theme.accent)
                         }
                     }
                     Stepper(value: $skipPadding, in: 0...10, step: 0.5) {
                         HStack {
                             Text("Keep either side")
                             Spacer()
-                            Text(String(format: "%.1f s", skipPadding)).monospacedDigit().foregroundStyle(.orange)
+                            Text(String(format: "%.1f s", skipPadding)).monospacedDigit().foregroundStyle(Theme.accent)
                         }
                     }
                     Button("Reset to defaults") {
@@ -251,8 +296,7 @@ struct RunDetailView: View {
 
     private func card<C: View>(@ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) { content() }
-            .padding(14)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .card()
     }
 
     private func elevationRange(_ st: RunStats) -> String {
@@ -329,7 +373,7 @@ struct RunDetailView: View {
                     share = ShareItem(url: url)
                 }
             } catch {
-                exporting = nil
+                exportError = error.localizedDescription
             }
         }
     }

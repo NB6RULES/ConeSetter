@@ -133,7 +133,8 @@ struct SimResult {
     var calibratedAt: Double?
 }
 
-func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd, barometer: Bool = true) -> SimResult {
+func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd, barometer: Bool = true,
+              gravityLeak: Double = 0) -> SimResult {
     var rng = RNG(state: seed)
     let truth = makeTruth(laps: 2, preRoll: 4, postRoll: 4, rate: 100)
     let engine = FusionEngine(useIMU: useIMU)
@@ -147,6 +148,7 @@ func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd
     let z0 = 80.0
     var pending: [(arrive: Double, fix: GPSFix)] = []
     var calibratedAt: Double?
+    var leak = SIMD3<Double>(0, 0, 0)
 
     for i in truth.t.indices {
         let t = truth.t[i]
@@ -185,9 +187,12 @@ func simulate(useIMU: Bool, flipAccelSign: Bool, seed: UInt64, mount: simd_quatd
             let wCar = SIMD3<Double>(0, 0, v * k)
             let gCar = SIMD3<Double>(0, 0, -1)
             let vib = SIMD3<Double>(sin(t * 2 * .pi * 23), cos(t * 2 * .pi * 31), sin(t * 2 * .pi * 17)) * 0.04
-            var acc = mount.act(aCar) + accBias + vib + SIMD3(rng.gauss(), rng.gauss(), rng.gauss()) * 0.03
+            // Optional: the gravity estimate slowly absorbs part of any sustained acceleration
+            // (as Core Motion's does), so the reported user acceleration loses that part.
+            leak += (aCar * gravityLeak - leak) * (0.01 / 4.0)
+            var acc = mount.act(aCar - leak) + accBias + vib + SIMD3(rng.gauss(), rng.gauss(), rng.gauss()) * 0.03
             if flipAccelSign { acc = -acc }
-            let grav = mount.act(gCar) + SIMD3(rng.gauss(), rng.gauss(), rng.gauss()) * 0.002
+            let grav = mount.act(simd_normalize(gCar - leak)) + SIMD3(rng.gauss(), rng.gauss(), rng.gauss()) * 0.002
             let gyro = mount.act(wCar) + SIMD3(rng.gauss(), rng.gauss(), rng.gauss()) * 0.01
             engine.addMotion(t: t, gravity: grav, userAccel: acc, rotationRate: gyro)
             if calibratedAt == nil, engine.state.isFused { calibratedAt = t }
@@ -210,7 +215,7 @@ func truthStats(_ tr: Truth) -> (distance: Double, top: Double, t75: Double) {
     return (tr.s.last! - tr.s.first!, tr.v.max()!, tr.t[i75b] - launch)
 }
 
-func evaluate(_ name: String, _ r: SimResult, expectFused: Bool) {
+func evaluate(_ name: String, _ r: SimResult, expectFused: Bool, relaxed: Bool = false) {
     print("\n== \(name)")
     let s = r.run.samples
     let st = RunAnalysis.stats(r.run)
@@ -231,9 +236,10 @@ func evaluate(_ name: String, _ r: SimResult, expectFused: Bool) {
         }
         print(String(format: "  speed RMS err %.3f m/s  max %.3f  | long accel RMS %.3f m/s²  | lat accel RMS %.3f m/s²",
                      rms(ev), ev.map(abs).max() ?? 0, rms(ea), rms(el)))
-        check(rms(ev) < 0.45, "fused speed RMS error < 0.45 m/s")
-        check(rms(ea) < 1.2, "long accel RMS error < 1.2 m/s²")
+        check(rms(ev) < (relaxed ? 0.8 : 0.45), "fused speed RMS error < \(relaxed ? 0.8 : 0.45) m/s")
+        check(rms(ea) < (relaxed ? 2.0 : 1.2), "long accel RMS error < \(relaxed ? 2.0 : 1.2) m/s²")
         check(rms(el) < 1.2, "lat accel RMS error < 1.2 m/s²")
+        check(st.fusedFraction > 0.9, "stays fused for the whole run (no false 'phone moved')")
         check(st.sampleRate > 9, "~10 Hz output")
     }
 
@@ -253,7 +259,7 @@ func evaluate(_ name: String, _ r: SimResult, expectFused: Bool) {
     check(abs(st.distance - tru.distance) / tru.distance < (expectFused ? 0.03 : 0.05), "distance within tolerance")
     check(abs(st.topSpeed - tru.top) < (expectFused ? 0.8 : 1.2), "top speed within tolerance")
     if expectFused {
-        check(st.best75m.map { abs($0 - tru.t75) < 0.25 } ?? false, "75 m time within 0.25 s")
+        check(st.best75m.map { abs($0 - tru.t75) < (relaxed ? 0.4 : 0.25) } ?? false, "75 m time within tolerance")
     }
     check(st.maxLateral > 0.5 * Geo.g, "lateral g detected in corners")
 
@@ -336,6 +342,9 @@ evaluate("IMU fusion · tilted mount", fusedA, expectFused: true)
 
 let fusedB = simulate(useIMU: true, flipAccelSign: true, seed: 7, mount: mountB)
 evaluate("IMU fusion · upright mount, opposite accel sign convention", fusedB, expectFused: true)
+
+let leaky = simulate(useIMU: true, flipAccelSign: false, seed: 11, mount: mountA, gravityLeak: 0.6)
+evaluate("IMU fusion · gravity estimate leaning in corners (Core Motion-like)", leaky, expectFused: true, relaxed: true)
 
 let gpsOnly = simulate(useIMU: false, flipAccelSign: false, seed: 99, mount: mountA, barometer: false)
 evaluate("GPS only", gpsOnly, expectFused: false)
