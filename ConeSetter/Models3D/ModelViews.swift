@@ -85,17 +85,18 @@ struct ModelsHomeView: View {
             }
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("3D Viewer")
-            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-                switch result {
-                case .success(let urls):
+            .sheet(isPresented: $showImporter) {
+                DocumentPicker { urls in
                     var last: ModelItem?
                     for url in urls {
                         do { last = try library.importFile(from: url) } catch { router.importError = error.localizedDescription }
                     }
-                    if urls.count == 1, let item = last { router.openItem = item }
-                case .failure(let error):
-                    router.importError = error.localizedDescription
+                    if let item = last {
+                        // Let the picker finish closing before the viewer opens.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { router.openItem = item }
+                    }
                 }
+                .ignoresSafeArea()
             }
             .fullScreenCover(item: $router.openItem) { item in
                 if item.kind.isViewable {
@@ -233,6 +234,33 @@ struct ModelsHomeView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.subheadline.weight(.semibold))
             Text(text).font(.footnote).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// The system file browser in single-pick mode: tapping a file opens it straight away, with no
+/// separate Open button. Files are handed over as copies, so no access permissions can expire.
+struct DocumentPicker: UIViewControllerRepresentable {
+    var onPick: ([URL]) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
+        picker.allowsMultipleSelection = false
+        picker.shouldShowFileExtensions = true
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: ([URL]) -> Void
+        init(onPick: @escaping ([URL]) -> Void) { self.onPick = onPick }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            onPick(urls)
         }
     }
 }
