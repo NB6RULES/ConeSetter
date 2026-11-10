@@ -38,6 +38,18 @@ Records the car's speed with timestamps and coordinates, and keeps running with 
 
 CI runs `Tests/Harness/main.swift`, which simulates laps with noisy GPS, IMU and barometer and an arbitrary phone mount, before every build. Its outputs, including a sample Excel export, are attached to the `ci-test` pre-release.
 
+## 3D tab (CAD and 3D file viewer)
+
+Opens 3D files offline, from the in-app picker or by sharing a file to Cone Setter from the Files app.
+
+- **CAD:** STEP, IGES, BREP, FreeCAD (.fcstd), Rhino (.3dm), read with the OpenCascade kernel compiled to WebAssembly.
+- **Drawings:** ASCII DXF (lines, polylines with bulges, arcs, circles, ellipses, splines, blocks, 3D faces and polyface meshes). Text and hatches aren't drawn.
+- **Mesh:** STL, OBJ, PLY, OFF, 3MF, AMF, glTF / GLB, FBX, DAE, 3DS, VRML.
+- **Viewer:** orbit, pinch-zoom and pan; Iso / Front / Back / Left / Right / Top / Bottom views; feature edges; perspective or orthographic; Y-up or Z-up; overall size, triangle and part counts.
+- **Closed formats** (SolidWorks .sldprt, CATIA .CATPart, NX / Creo .prt, Fusion .f3d, Inventor .ipt, DWG, Parasolid, JT) can't be read by anything but their own software. The app says so, shows the export steps for a STEP or DXF, and shows the preview picture embedded in the file when there is one.
+
+The viewer is the [Online 3D Viewer](https://github.com/kovacsv/Online3DViewer) engine in a web view, with `occt-import-js`, `rhino3dm` and `draco3d` bundled under `ConeSetter/Resources/Viewer/libs` (licences in `LICENSES.txt`).
+
 ## CSV format
 
 One cone per row, comma / semicolon / tab separated, metres, `x` forward and `y` left:
