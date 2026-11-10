@@ -23,6 +23,15 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "1.4.1",
+          "buildVersion": "9",
+          "date": "2026-11-10T15:34:33Z",
+          "localizedDescription": "3D tab: replace multi-select file importer with tap-to-open document picker",
+          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.4.1-b9/ConeSetter.ipa",
+          "size": 5853195,
+          "minOSVersion": "18.0"
+        },
+        {
           "version": "1.4.0",
           "buildVersion": "8",
           "date": "2026-11-10T12:26:21Z",
@@ -75,11 +84,11 @@
           "NSLocationWhenInUseUsageDescription": "Cone Setter tags saved track layouts with the site location so you can find them again."
         }
       },
-      "version": "1.4.0",
-      "versionDate": "2026-11-10T12:26:21Z",
-      "versionDescription": "3D viewer: open Blender .blend files (4.2-5.2 verified, zstd/gzip)",
-      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.4.0-b8/ConeSetter.ipa",
-      "size": 5849955
+      "version": "1.4.1",
+      "versionDate": "2026-11-10T15:34:33Z",
+      "versionDescription": "3D tab: replace multi-select file importer with tap-to-open document picker",
+      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.4.1-b9/ConeSetter.ipa",
+      "size": 5853195
     }
   ],
   "news": []
