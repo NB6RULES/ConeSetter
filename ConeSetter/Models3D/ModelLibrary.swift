@@ -11,7 +11,7 @@ enum ModelKind: Equatable {
 
     static let viewable: [String: String] = [
         "step": "STEP", "stp": "STEP", "iges": "IGES", "igs": "IGES", "brep": "OpenCascade BREP", "brp": "OpenCascade BREP",
-        "fcstd": "FreeCAD", "3dm": "Rhino 3DM", "dxf": "DXF drawing",
+        "fcstd": "FreeCAD", "3dm": "Rhino 3DM", "dxf": "DXF drawing", "blend": "Blender",
         "stl": "STL", "obj": "Wavefront OBJ", "ply": "PLY", "off": "OFF", "3mf": "3MF", "amf": "AMF",
         "gltf": "glTF", "glb": "glTF binary", "fbx": "FBX", "dae": "Collada", "3ds": "3D Studio", "wrl": "VRML", "bim": "dotbim",
     ]
@@ -45,8 +45,6 @@ enum ModelKind: Equatable {
             return .proprietary(app: "your CAD program", format: "JT file", export: "Export as STEP from NX or Teamcenter")
         case "skp":
             return .proprietary(app: "SketchUp", format: "SketchUp model", export: "File › Export › 3D Model › OBJ, STL or glTF")
-        case "blend":
-            return .proprietary(app: "Blender", format: "Blender file", export: "File › Export › glTF 2.0 (.glb)")
         case "3dxml":
             return .proprietary(app: "CATIA / 3DEXPERIENCE", format: "3DXML file", export: "Export as STEP")
         default:
@@ -70,6 +68,7 @@ struct ModelInfo: Codable, Equatable {
     var size: [Double] = []
     var flat = false
     var skipped: [String: Int] = [:]
+    var notes: [String] = []
 
     init() {}
 
@@ -84,6 +83,7 @@ struct ModelInfo: Codable, Equatable {
         size = (d["size"] as? [NSNumber])?.map(\.doubleValue) ?? []
         flat = (d["flat"] as? NSNumber)?.boolValue ?? false
         if let s = d["dxfSkipped"] as? [String: NSNumber] { skipped = s.mapValues(\.intValue) }
+        notes = d["notes"] as? [String] ?? []
     }
 
     var sizeText: String? {

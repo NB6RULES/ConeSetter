@@ -127,7 +127,7 @@ struct ModelsHomeView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("View CAD and 3D files")
                 .font(.system(size: 26, weight: .heavy, design: .rounded))
-            Text("STEP, IGES, STL, DXF, OBJ, 3MF, glTF and more, fully offline.")
+            Text("STEP, IGES, STL, DXF, Blender, OBJ, 3MF, glTF and more, fully offline.")
                 .font(.subheadline)
                 .opacity(0.92)
             Button { showImporter = true } label: {
@@ -215,6 +215,7 @@ struct ModelsHomeView: View {
                     formatRow("CAD", "STEP (.step .stp), IGES (.iges .igs), BREP, FreeCAD (.fcstd), Rhino (.3dm)")
                     formatRow("Drawings", "DXF (ASCII): lines, polylines, arcs, circles, splines, blocks, 3D faces")
                     formatRow("Mesh", "STL, OBJ, PLY, OFF, 3MF, AMF, glTF / GLB, FBX, DAE, 3DS, VRML")
+                    formatRow("Blender", ".blend mesh objects with their viewport colours. Modifiers, curves and text aren't shown.")
                     Divider().overlay(Theme.stroke)
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "lock.fill").foregroundStyle(.secondary).frame(width: 22)
@@ -419,6 +420,13 @@ struct ModelInfoSheet: View {
                         if info.lines > 0 { LabeledContent("Line segments", value: info.lines.formatted()) }
                         LabeledContent("Vertices", value: info.vertices.formatted())
                         if info.materials > 1 { LabeledContent("Colours / materials", value: "\(info.materials)") }
+                    }
+                    if !info.notes.isEmpty {
+                        Section("Notes") {
+                            ForEach(info.notes, id: \.self) { note in
+                                Text(note).font(.subheadline)
+                            }
+                        }
                     }
                     if !info.skipped.isEmpty {
                         Section {

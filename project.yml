@@ -6,7 +6,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "1.3.0"
+    MARKETING_VERSION: "1.4.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
@@ -53,7 +53,7 @@ targets:
             UTTypeDescription: 3D model or CAD file
             UTTypeConformsTo: [public.data]
             UTTypeTagSpecification:
-              public.filename-extension: ["step", "stp", "iges", "igs", "brep", "brp", "fcstd", "3dm", "dxf", "stl", "obj", "ply", "off", "3mf", "amf", "gltf", "glb", "fbx", "dae", "3ds", "wrl", "bim", "sldprt", "sldasm", "slddrw", "catpart", "catproduct", "cgr", "f3d", "f3z", "ipt", "iam", "prt", "asm", "par", "psm", "x_t", "x_b", "sat", "sab", "dwg", "jt", "skp", "3dxml"]
+              public.filename-extension: ["step", "stp", "iges", "igs", "brep", "brp", "fcstd", "3dm", "dxf", "stl", "obj", "ply", "off", "3mf", "amf", "gltf", "glb", "fbx", "dae", "3ds", "wrl", "bim", "sldprt", "sldasm", "slddrw", "catpart", "catproduct", "cgr", "f3d", "f3z", "ipt", "iam", "prt", "asm", "par", "psm", "x_t", "x_b", "sat", "sab", "dwg", "jt", "skp", "3dxml", "blend"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nb6rules.conesetter
