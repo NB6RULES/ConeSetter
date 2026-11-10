@@ -183,6 +183,32 @@
                     }).catch((e) => {
                         if (token === state.token) { post({ type: 'error', message: e.message || String(e) }); }
                     });
+                } else if (ext === 'blend') {
+                    fetch(url).then((r) => {
+                        if (!r.ok) { throw new Error('Could not read the file'); }
+                        return r.arrayBuffer();
+                    }).then((buffer) => BLEND.convert(buffer)).then((result) => {
+                        if (token !== state.token) { return; }
+                        const notes = ['Saved by Blender ' + result.version + '.'];
+                        if (result.withModifiers > 0) {
+                            notes.push(result.withModifiers + ' object' + (result.withModifiers === 1 ? ' uses' : 's use') +
+                                ' modifiers. Modifiers are not applied, so the base mesh is shown.');
+                        }
+                        if (result.otherObjects > 0) {
+                            notes.push(result.otherObjects + ' non-mesh object' + (result.otherObjects === 1 ? '' : 's') +
+                                ' (curves, text, lights, cameras, empties) not shown.');
+                        }
+                        for (const w of result.warnings) { notes.push(w); }
+                        state.extra = { unit: 'm', notes: notes };
+                        state.up = 'Z';
+                        create(token, () => finish(false));
+                        state.embedded.LoadModelFromFileList([
+                            new File([result.obj], 'model.obj', { type: 'text/plain' }),
+                            new File([result.mtl], 'materials.mtl', { type: 'text/plain' })
+                        ]);
+                    }).catch((e) => {
+                        if (token === state.token) { post({ type: 'error', message: e.message || String(e) }); }
+                    });
                 } else {
                     create(token, () => finish(false));
                     state.embedded.LoadModelFromUrlList([url]);

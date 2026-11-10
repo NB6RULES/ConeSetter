@@ -45,6 +45,7 @@ Opens 3D files offline, from the in-app picker or by sharing a file to Cone Sett
 - **CAD:** STEP, IGES, BREP, FreeCAD (.fcstd), Rhino (.3dm), read with the OpenCascade kernel compiled to WebAssembly.
 - **Drawings:** ASCII DXF (lines, polylines with bulges, arcs, circles, ellipses, splines, blocks, 3D faces and polyface meshes). Text and hatches aren't drawn.
 - **Mesh:** STL, OBJ, PLY, OFF, 3MF, AMF, glTF / GLB, FBX, DAE, 3DS, VRML.
+- **Blender:** .blend files (`blend.js`, an own reader driven by the file's SDNA; verified against Blender 4.2, 4.5 and 5.2, including Zstandard-compressed files). Mesh objects are shown in world space with viewport material colours. Modifiers aren't applied, and curves, text and instanced collections aren't shown.
 - **Viewer:** orbit, pinch-zoom and pan; Iso / Front / Back / Left / Right / Top / Bottom views; feature edges; perspective or orthographic; Y-up or Z-up; overall size, triangle and part counts.
 - **Closed formats** (SolidWorks .sldprt, CATIA .CATPart, NX / Creo .prt, Fusion .f3d, Inventor .ipt, DWG, Parasolid, JT) can't be read by anything but their own software. The app says so, shows the export steps for a STEP or DXF, and shows the preview picture embedded in the file when there is one.
 
