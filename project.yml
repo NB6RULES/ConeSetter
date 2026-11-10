@@ -6,7 +6,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "1.2.0"
+    MARKETING_VERSION: "1.3.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
@@ -19,6 +19,11 @@ targets:
     platform: iOS
     sources:
       - path: ConeSetter
+        excludes:
+          - "Resources/Viewer/**"
+      - path: ConeSetter/Resources/Viewer
+        type: folder
+        buildPhase: resources
     info:
       path: Support/Info.plist
       properties:
@@ -36,6 +41,19 @@ targets:
         NSLocationWhenInUseUsageDescription: Cone Setter uses GPS to record speed runs and to tag saved track layouts with the site location.
         NSMotionUsageDescription: Cone Setter uses the motion sensors and barometer for 10 Hz speed, g-force and elevation logging.
         UIBackgroundModes: [location]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: 3D model or CAD file
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.nb6rules.conesetter.cad
+              - public.3d-content
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.nb6rules.conesetter.cad
+            UTTypeDescription: 3D model or CAD file
+            UTTypeConformsTo: [public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: ["step", "stp", "iges", "igs", "brep", "brp", "fcstd", "3dm", "dxf", "stl", "obj", "ply", "off", "3mf", "amf", "gltf", "glb", "fbx", "dae", "3ds", "wrl", "bim", "sldprt", "sldasm", "slddrw", "catpart", "catproduct", "cgr", "f3d", "f3z", "ipt", "iam", "prt", "asm", "par", "psm", "x_t", "x_b", "sat", "sab", "dwg", "jt", "skp", "3dxml"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nb6rules.conesetter
