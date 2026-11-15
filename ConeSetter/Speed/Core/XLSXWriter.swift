@@ -90,7 +90,7 @@ final class XLSXWorkbook {
 
     private(set) var sheets: [Sheet] = []
     var title = "Workbook"
-    var creator = "Cone Setter"
+    var creator = "OBRA Essentials"
 
     func addSheet(_ name: String) -> Sheet {
         let s = Sheet(name: name)
@@ -190,7 +190,7 @@ final class XLSXWorkbook {
         <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>\(esc(title))</dc:title><dc:creator>\(esc(creator))</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">\(now)</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">\(now)</dcterms:modified></cp:coreProperties>
         """)
         zip.add("docProps/app.xml", xmlHeader + """
-        <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Cone Setter</Application></Properties>
+        <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>OBRA Essentials</Application></Properties>
         """)
 
         var wb = xmlHeader + "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><bookViews><workbookView activeTab=\"0\"/></bookViews><sheets>"

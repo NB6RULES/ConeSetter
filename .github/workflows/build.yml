@@ -46,6 +46,12 @@ jobs:
           { xcrun swiftc -O -module-name Harness ConeSetter/Speed/Core/*.swift Tests/Harness/main.swift -o harness-bin 2>&1 \
             && ./harness-bin harness-out 2>&1; } | tee harness-out/harness.log
 
+      - name: Logic tests (FarLink protocol)
+        run: |
+          set -o pipefail
+          { xcrun swiftc -O -module-name FarLinkHarness ConeSetter/FarLink/Protocol/*.swift Tests/FarLinkHarness/main.swift -o farlink-harness-bin 2>&1 \
+            && ./farlink-harness-bin 2>&1; } | tee harness-out/farlink-harness.log
+
       - name: Build (unsigned)
         run: |
           xcodebuild \

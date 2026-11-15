@@ -47,7 +47,7 @@ enum RunBulkExport {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.dateFormat = "yyyy-MM-dd HHmm"
-        let name = "ConeSetter \(runs.count) run\(runs.count == 1 ? "" : "s") \(df.string(from: Date())).zip"
+        let name = "OBRA \(runs.count) run\(runs.count == 1 ? "" : "s") \(df.string(from: Date())).zip"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try data.write(to: url, options: .atomic)
         return url

@@ -183,7 +183,7 @@ struct VersionFooter: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            Text("Cone Setter \(updater.currentVersion) (build \(updater.currentBuild))")
+            Text("OBRA Essentials \(updater.currentVersion) (build \(updater.currentBuild))")
                 .font(.footnote.weight(.semibold))
             if let s = updater.status {
                 Text(s).font(.caption).foregroundStyle(.secondary)

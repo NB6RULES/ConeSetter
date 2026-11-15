@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 final class AppRouter: ObservableObject {
     static let shared = AppRouter()
 
-    enum Tab: Hashable { case cones, speed, models }
+    enum Tab: Hashable { case cones, speed, models, farlink }
 
     @Published var tab: Tab = .cones
     @Published var openItem: ModelItem?
@@ -51,7 +51,7 @@ struct ModelsHomeView: View {
                                 .font(.system(size: 38))
                                 .foregroundStyle(Theme.accent)
                             Text("No files yet").font(.headline)
-                            Text("Open a STEP, STL, DXF or other 3D file. You can also share a file to Cone Setter from the Files app.")
+                            Text("Open a STEP, STL, DXF or other 3D file. You can also share a file to OBRA Essentials from the Files app.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -111,7 +111,7 @@ struct ModelsHomeView: View {
             } message: {
                 Text(router.importError ?? "")
             }
-            .confirmationDialog("Delete this file from Cone Setter?", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
+            .confirmationDialog("Delete this file from OBRA Essentials?", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
                                 titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let t = deleteTarget { library.delete(t) }
@@ -564,6 +564,6 @@ struct UnsupportedFormatView: View {
         if case .proprietary(let app, _, _) = item.kind {
             return "This is a closed format. Only \(app) (or software licensed by its maker) can read the geometry inside, so no independent viewer can open it."
         }
-        return "Cone Setter doesn't recognise this file type as a 3D model. If it is one, export it as STEP, STL or OBJ and open that instead."
+        return "OBRA Essentials doesn't recognise this file type as a 3D model. If it is one, export it as STEP, STL or OBJ and open that instead."
     }
 }

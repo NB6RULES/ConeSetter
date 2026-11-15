@@ -12,11 +12,14 @@ struct ConeSetterApp: App {
                     .tabItem { Label("Cones", systemImage: "cone.fill") }
                     .tag(AppRouter.Tab.cones)
                 SpeedHomeView()
-                    .tabItem { Label("Speed", systemImage: "speedometer") }
+                    .tabItem { Label("GPS", systemImage: "location.north.line.fill") }
                     .tag(AppRouter.Tab.speed)
                 ModelsHomeView()
                     .tabItem { Label("3D", systemImage: "cube.fill") }
                     .tag(AppRouter.Tab.models)
+                FarLinkHomeView()
+                    .tabItem { Label("FarLink", systemImage: "bolt.horizontal.circle.fill") }
+                    .tag(AppRouter.Tab.farlink)
             }
             .tint(Theme.accent)
             .preferredColorScheme(.dark)

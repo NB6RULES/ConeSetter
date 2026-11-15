@@ -83,7 +83,7 @@ struct HomeView: View {
                 .padding(16)
             }
             .background(Theme.background.ignoresSafeArea())
-            .navigationTitle("Cone Setter")
+            .navigationTitle("Cones")
             .navigationDestination(item: $importedLayout) { layout in
                 LayoutSetupView(custom: layout)
             }

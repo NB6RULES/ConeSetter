@@ -32,7 +32,7 @@ struct SpeedHomeView: View {
 
                     if rec.authorization == .denied || rec.authorization == .restricted {
                         VStack(alignment: .leading, spacing: 10) {
-                            Label("Location access is off. Turn it on in Settings › Cone Setter to record speed.",
+                            Label("Location access is off. Turn it on in Settings › OBRA Essentials to record speed.",
                                   systemImage: "location.slash.fill")
                                 .font(.subheadline)
                             Button("Open Settings") {
@@ -162,7 +162,7 @@ struct SpeedHomeView: View {
                 selected.formIntersection(list.map(\.id))
                 if list.isEmpty { selecting = false }
             }
-            .navigationTitle("Speed")
+            .navigationTitle("GPS speed")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
