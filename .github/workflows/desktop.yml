@@ -40,6 +40,7 @@ jobs:
       - name: Build exe
         shell: pwsh
         run: |
+          Set-Content -Path analyzer\_build.py -Value "BUILD = ${{ github.run_number }}" -Encoding ascii
           python -c "from PIL import Image; Image.open('icon.png').save('icon.ico', sizes=[(256,256),(64,64),(48,48),(32,32),(16,16)])"
           pyinstaller --noconfirm --clean --onefile --windowed --name OBRA-Run-Analyzer `
             --icon icon.ico --add-data "icon.png;." `
@@ -54,15 +55,60 @@ jobs:
           Get-Content selftest-out\selftest.txt
           if ($p.ExitCode -ne 0) { throw "self-test failed with exit code $($p.ExitCode)" }
 
-      - name: Publish release
+      - name: Self-update test (replace the running exe, restart)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory uptest | Out-Null
+          $app = Join-Path $PWD "uptest\App.exe"
+          $new = "$app.new"
+          Copy-Item dist\OBRA-Run-Analyzer.exe $app
+          Copy-Item dist\OBRA-Run-Analyzer.exe $new
+          $stamp = Get-Date "2020-01-02 03:04:05"
+          (Get-Item $new).LastWriteTime = $stamp
+          (Get-Item $app).LastWriteTime = Get-Date "2021-06-07 08:09:10"
+          $out = Join-Path $PWD "uptest\out"
+          $zip = Join-Path $PWD "sample\demo-runs.zip"
+          Start-Process -FilePath $app -ArgumentList "--selftest-update",$new,"--selftest",$out,$zip -Wait
+          $result = Join-Path $out "selftest.txt"
+          for ($i = 0; $i -lt 90 -and -not (Test-Path $result); $i++) { Start-Sleep -Seconds 2 }
+          if (-not (Test-Path $result)) { throw "the updated program never restarted" }
+          Start-Sleep -Seconds 3
+          Get-Content $result
+          if (Test-Path $new) { throw "the downloaded copy was not moved into place" }
+          if ((Get-Item $app).LastWriteTime -ne $stamp) { throw "the exe was not replaced" }
+          if (-not (Select-String -Path $result -Pattern "SELFTEST OK" -Quiet)) { throw "the restarted program failed its self-test" }
+          Write-Host "Self-update OK: exe replaced and restarted"
+
+      - name: Publish release (rolling tag analyzer-latest)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $v = python -c "import analyzer; print(analyzer.__version__)"
-          $tag = "analyzer-v$v-b${{ github.run_number }}"
+          $build = "${{ github.run_number }}"
+          $title = "OBRA Run Analyzer for Windows: $v (build $build)"
+          $notes = "Windows app to play back and analyse speed runs from the phone app. Download **OBRA-Run-Analyzer.exe** and run it (no installer). It checks for updates itself. demo-runs.zip is sample data to try. This entry is replaced by every new build."
           Copy-Item sample\demo-runs.zip demo-runs.zip
-          gh release create $tag "dist\OBRA-Run-Analyzer.exe" demo-runs.zip selftest-out\selftest-run.png selftest-out\selftest-compare.png selftest-out\selftest.txt `
-            --title "OBRA Run Analyzer $v for Windows (build ${{ github.run_number }})" `
-            --notes "Windows app to play back and analyse speed runs from the phone app. Download OBRA-Run-Analyzer.exe and run it; demo-runs.zip is sample data to try." `
-            --latest=false --target $env:GITHUB_SHA
+          gh release view analyzer-latest *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create analyzer-latest --title $title --notes $notes --latest=false --target $env:GITHUB_SHA }
+          gh release upload analyzer-latest "dist\OBRA-Run-Analyzer.exe" demo-runs.zip selftest-out\selftest-run.png selftest-out\selftest-compare.png selftest-out\selftest.txt --clobber
+          if ($LASTEXITCODE -ne 0) { throw "upload failed" }
+          gh release edit analyzer-latest --title $title --notes $notes --latest=false
+          $manifest = [ordered]@{
+            version = $v
+            build   = [int]$build
+            url     = "https://github.com/${{ github.repository }}/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe"
+            notes   = (git log -1 --pretty=%s) -replace '\s*\[[^\]]*\]\s*', ''
+            date    = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+            size    = (Get-Item dist\OBRA-Run-Analyzer.exe).Length
+          }
+          $json = $manifest | ConvertTo-Json
+          [IO.File]::WriteAllText((Join-Path $PWD "latest.json"), $json + "`n")
+          Get-Content latest.json
+          git checkout -- analyzer/_build.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add latest.json
+          git commit -m "desktop/latest.json: $v build $build [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main

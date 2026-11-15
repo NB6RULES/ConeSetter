@@ -12,7 +12,7 @@ import pyqtgraph as pg
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import Qt
 
-from . import __version__
+from . import __version__, updater
 from .data import G, Run, load_path, safe_filename, site_key
 from .laps import (Gate, Lap, best_lap, delta_to, find_laps, format_lap_time, gate_from_xy, lap_trace, laps_csv)
 
@@ -36,8 +36,8 @@ QMainWindow, QWidget#root, QStackedWidget {{ background: {BG}; }}
 QFrame#panel {{ background: {SURFACE}; border: 1px solid #2A2B33; border-radius: 12px; }}
 QLabel#title {{ color: {MUTED}; font-size: 8pt; font-weight: 700; letter-spacing: 1px; }}
 QLabel#muted {{ color: {MUTED}; }}
-QLabel#big {{ font-size: 30pt; font-weight: 800; }}
-QLabel#value {{ font-size: 13pt; font-weight: 700; }}
+QLabel#big {{ font-size: 28pt; font-weight: 800; }}
+QLabel#value {{ font-size: 12pt; font-weight: 700; }}
 QLabel#hero {{ font-size: 20pt; font-weight: 800; }}
 QPushButton {{ background: {SURFACE_HI}; border: 1px solid #34353E; border-radius: 8px; padding: 6px 12px; }}
 QPushButton:hover {{ background: #30313A; }}
@@ -127,11 +127,12 @@ class Tile(QtWidgets.QFrame):
         super().__init__()
         self.setObjectName("panel")
         lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(10, 6, 10, 8)
-        lay.setSpacing(0)
+        lay.setContentsMargins(10, 5, 10, 6)
+        lay.setSpacing(1)
         lay.addWidget(label(title.upper(), "title"))
         self.value = label("–", "value")
         lay.addWidget(self.value)
+        self.setMinimumHeight(54)
 
     def set(self, text: str):
         self.value.setText(text)
@@ -154,11 +155,29 @@ def make_plot(left: str | None = None) -> pg.PlotWidget:
     return p
 
 
+class Worker(QtCore.QThread):
+    """Runs one function off the UI thread."""
+    done = QtCore.Signal(object)
+    failed = QtCore.Signal(str)
+    progress = QtCore.Signal(object, object)
+
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    def run(self):
+        try:
+            self.done.emit(self.fn())
+        except Exception as e:  # noqa: BLE001 - reported to the user by the caller
+            self.failed.emit(str(getattr(e, "reason", None) or e) or type(e).__name__)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, persist: bool = True):
         super().__init__()
         self.setWindowTitle(f"OBRA Run Analyzer {__version__}")
         self.resize(1500, 920)
+        self.setMinimumSize(1100, 700)
         self.setAcceptDrops(True)
         self.persist = persist
         self.settings = QtCore.QSettings("OBRA", "RunAnalyzer")
@@ -184,6 +203,101 @@ class MainWindow(QtWidgets.QMainWindow):
         self.timer.timeout.connect(self._tick)
         self.clock = QtCore.QElapsedTimer()
         self._show_run(None)
+        self.pending_release: updater.Release | None = None
+        self._update_threads: list = []
+        if self.persist and updater.BUILD:
+            QtCore.QTimer.singleShot(1500, lambda: self.check_updates(manual=False))
+
+    # ------------------------------------------------------------ updates
+
+    def check_updates(self, manual: bool):
+        if manual and self.pending_release is not None:
+            self._offer_update(self.pending_release, manual=True)
+            return
+        if manual and not updater.BUILD:
+            QtWidgets.QMessageBox.information(self, "Updates", "This copy is running from source, so it doesn't update itself.")
+            return
+        th = Worker(updater.fetch_latest)
+        th.done.connect(lambda rel: self._update_checked(rel, manual))
+        th.failed.connect(lambda msg: manual and QtWidgets.QMessageBox.warning(
+            self, "Updates", f"Couldn't check for updates.\n{msg}"))
+        self._keep(th)
+        th.start()
+
+    def _keep(self, th):
+        self._update_threads.append(th)
+        th.finished.connect(lambda: self._update_threads.remove(th) if th in self._update_threads else None)
+
+    def _update_checked(self, rel, manual: bool):
+        if not updater.is_newer(rel):
+            if manual:
+                QtWidgets.QMessageBox.information(self, "Updates", f"You have the newest version, {updater.current_label()}.")
+            return
+        self.pending_release = rel
+        self.update_btn.setText(f"Update to {rel.version} available")
+        self.update_btn.setFlat(False)
+        self.update_btn.setStyleSheet(f"background: {ACCENT}; border: 1px solid {ACCENT}; color: white; font-weight: 700; "
+                                      "border-radius: 8px; padding: 6px 12px;")
+        if not manual and int(self.settings.value("skipBuild", 0) or 0) == rel.build:
+            return
+        self._offer_update(rel, manual)
+
+    def _offer_update(self, rel, manual: bool):
+        box = QtWidgets.QMessageBox(self)
+        box.setWindowTitle("Update available")
+        box.setIcon(QtWidgets.QMessageBox.Information)
+        box.setText(f"OBRA Run Analyzer {rel.label} is available.")
+        info = f"You have {updater.current_label()}."
+        if rel.notes:
+            info += f"\n\nWhat's new:\n{rel.notes}"
+        can = updater.can_self_update()
+        if not can:
+            info += "\n\nThis copy can't replace itself here, so the download page will open instead."
+        box.setInformativeText(info)
+        now = box.addButton("Update now" if can else "Open download page", QtWidgets.QMessageBox.AcceptRole)
+        box.addButton("Later", QtWidgets.QMessageBox.RejectRole)
+        skip = box.addButton("Skip this version", QtWidgets.QMessageBox.DestructiveRole)
+        box.exec()
+        if box.clickedButton() is skip:
+            self.settings.setValue("skipBuild", rel.build)
+        elif box.clickedButton() is now:
+            if can:
+                self._install_update(rel)
+            else:
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl(updater.DOWNLOAD_PAGE))
+
+    def _install_update(self, rel):
+        dest = updater.staging_path()
+        dlg = QtWidgets.QProgressDialog("Downloading the update…", "Cancel", 0, 100, self)
+        dlg.setWindowTitle("Updating")
+        dlg.setWindowModality(Qt.WindowModal)
+        dlg.setMinimumDuration(0)
+        dlg.setAutoClose(False)
+        dlg.setAutoReset(False)
+        th = Worker(lambda: updater.download(rel, dest, progress=lambda d, t: th.progress.emit(d, t),
+                                             cancelled=dlg.wasCanceled))
+        th.progress.connect(lambda d, t: (dlg.setValue(int(d * 100 / t)) if t else None,
+                                          dlg.setLabelText(f"Downloading the update…  {d / 1e6:.0f} of {t / 1e6:.0f} MB" if t else
+                                                           f"Downloading the update…  {d / 1e6:.0f} MB")))
+
+        def finished(_):
+            dlg.close()
+            updater.swap_and_restart(dest)
+            QtWidgets.QApplication.quit()
+
+        def failed(msg):
+            dlg.close()
+            if "cancelled" in msg:
+                return
+            r = QtWidgets.QMessageBox.warning(self, "Update failed", f"The update couldn't be downloaded.\n{msg}\n\nOpen the download page instead?",
+                                              QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+            if r == QtWidgets.QMessageBox.Yes:
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl(updater.DOWNLOAD_PAGE))
+
+        th.done.connect(finished)
+        th.failed.connect(failed)
+        self._keep(th)
+        th.start()
 
     # ------------------------------------------------------------ settings
 
@@ -236,7 +350,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.x_box.addItems(["Time", "Distance"])
         self.x_box.currentIndexChanged.connect(lambda _: self._draw_traces())
         self.heading = label("OBRA Run Analyzer", "value")
-        outer.addLayout(row(self.open_btn, self.heading, None,
+        self.update_btn = QtWidgets.QPushButton(f"v{updater.current_label()}")
+        self.update_btn.setToolTip("Check for updates")
+        self.update_btn.setFlat(True)
+        self.update_btn.clicked.connect(lambda: self.check_updates(manual=True))
+        outer.addLayout(row(self.open_btn, self.heading, None, self.update_btn,
                             label("Colour track by", "muted"), self.color_box,
                             label("Graphs against", "muted"), self.x_box,
                             label("Units", "muted"), self.unit_box, spacing=8))
@@ -406,7 +524,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.gg.setMouseEnabled(False, False)
         self.gg.hideAxis("left")
         self.gg.hideAxis("bottom")
-        self.gg.setFixedHeight(150)
+        self.gg.setFixedHeight(128)
         self.gg_cloud = pg.ScatterPlotItem(size=3, pen=None, brush=pg.mkBrush(255, 255, 255, 45))
         self.gg_trail = pg.PlotDataItem(pen=pg.mkPen(ACCENT, width=2))
         self.gg_dot = pg.ScatterPlotItem(size=12, pen=pg.mkPen("white", width=2), brush=pg.mkBrush(ACCENT))
@@ -472,6 +590,7 @@ class MainWindow(QtWidgets.QMainWindow):
         hh = self.lap_table.horizontalHeader()
         hh.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         hh.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        self.lap_table.setMinimumHeight(96)
         self.lap_table.itemSelectionChanged.connect(self._laps_selected)
         self.whole_btn = QtWidgets.QPushButton("Whole run")
         self.whole_btn.clicked.connect(self.lap_table.clearSelection)
@@ -1112,6 +1231,7 @@ def run_selftest(win: MainWindow, app: QtWidgets.QApplication, out_dir: str, pat
         import traceback
         log.append("ERROR " + "".join(traceback.format_exception(e)))
         ok = False
+    log.append(f"version={updater.current_label()} self_update={updater.can_self_update()}")
     log.append("SELFTEST OK" if ok else "SELFTEST FAILED")
     with open(os.path.join(out_dir, "selftest.txt"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(log) + "\n")
@@ -1120,6 +1240,11 @@ def run_selftest(win: MainWindow, app: QtWidgets.QApplication, out_dir: str, pat
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
+    if "--selftest-update" in argv:
+        # CI only: replace this .exe with the given one, then restart with the remaining arguments.
+        i = argv.index("--selftest-update")
+        updater.swap_and_restart(argv[i + 1], args=argv[i + 2:])
+        return 0
     selftest = None
     if "--selftest" in argv:
         i = argv.index("--selftest")

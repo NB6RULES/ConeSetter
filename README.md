@@ -1,5 +1,9 @@
 # Cone Setter
 
+> **Downloads**
+> - **Windows run analyzer:** [OBRA-Run-Analyzer.exe](https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe) (always the newest build; it updates itself)
+> - **iPhone app:** add `https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json` as a source in SideStore
+
 iPhone app that uses ARKit and the LiDAR scanner to lay out Formula Student / FS-AI test tracks. It shows a ghost cone on the ground for every cone in the layout, guides you to it, and uses each cone you place as a reference for the next ones.
 
 Built for the iPhone 17 Pro Max. Works on any LiDAR iPhone on iOS 18 or later.

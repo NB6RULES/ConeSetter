@@ -2,7 +2,9 @@
 
 Plays back and analyses the speed runs recorded by the phone app.
 
-**Download:** the newest `OBRA-Run-Analyzer.exe` under [Releases](https://github.com/NB6RULES/ConeSetter/releases) (the entries titled *OBRA Run Analyzer*). It is a single file with no installer. Windows may show "Windows protected your PC" because the file isn't signed: choose *More info*, then *Run anyway*.
+**Download:** [OBRA-Run-Analyzer.exe](https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe). This link always gives the newest build. It is a single file with no installer. Windows may show "Windows protected your PC" because the file isn't signed: choose *More info*, then *Run anyway*.
+
+**Updates:** the app checks for a newer build each time it starts. *Update now* downloads it, replaces the .exe and restarts. *Skip this version* stops the prompt until the next build. The version button at the top right checks on demand. GitHub Actions builds the .exe from `desktop/` on every push and writes `desktop/latest.json`, which is what the app reads.
 
 ## Using it
 

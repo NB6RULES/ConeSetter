@@ -116,6 +116,17 @@ with tempfile.TemporaryDirectory() as tmp:
     runs, problems = data.load_path(notzip)
     check(not runs and len(problems) == 1, f"broken zip gives a clear message: {problems}")
 
+print("== Updates")
+from analyzer import updater  # noqa: E402
+rel = updater.parse_manifest('{"version": "1.2.0", "build": 14, "url": "https://example.invalid/a.exe", "notes": "n", "size": "5"}')
+check(rel.build == 14 and rel.size == 5 and rel.label == "1.2.0 (build 14)", "update manifest parsed")
+check(updater.is_newer(rel, build=13) and not updater.is_newer(rel, build=14) and not updater.is_newer(rel, build=15), "newer build detected")
+check(not updater.is_newer(rel, build=0), "a copy run from source never prompts")
+here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "latest.json")
+if os.path.exists(here):
+    live = updater.parse_manifest(open(here, encoding="utf-8").read())
+    check(live.url.startswith("https://github.com/NB6RULES/ConeSetter/releases/download/"), "latest.json points at the release")
+
 samples = sys.argv[1] if len(sys.argv) > 1 else None
 if samples and os.path.isdir(samples):
     print("== Real Cone Setter exports")
