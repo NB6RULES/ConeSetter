@@ -36,7 +36,7 @@
 | 🔵 | **GPS** (iPhone) | 10 Hz GPS + IMU speed logger: heatmap track, graphs, driver / run type / notes, Excel / CSV / GPX, several runs in one zip |
 | 🟣 | **3D** (iPhone) | Offline viewer for STEP, IGES, STL, DXF, OBJ, 3MF, glTF, Blender and more |
 | 🟢 | **FarLink** (iPhone) | Dashboard, tuning and registers for FarDriver motor controllers over Bluetooth |
-| 🪟 | **Run Analyzer** (Windows) | Plays runs back on the track, times laps between start / finish lines you place, overlays laps |
+| 🪟 | **Run Analyzer** (Windows) | Plays runs back on a satellite map, times laps between start / finish lines you place, overlays laps |
 
 <div align="center">
 

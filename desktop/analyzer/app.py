@@ -12,8 +12,8 @@ import pyqtgraph as pg
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import Qt
 
-from . import __version__, updater
-from .data import G, Run, load_path, safe_filename, site_key
+from . import __version__, tiles, updater
+from .data import G, Run, load_path, safe_filename, site_key, to_local
 from .laps import (Gate, Lap, best_lap, delta_to, find_laps, format_lap_time, gate_from_xy, lap_trace, laps_csv)
 
 ACCENT = "#FF6B12"
@@ -173,6 +173,28 @@ class Worker(QtCore.QThread):
             self.failed.emit(str(getattr(e, "reason", None) or e) or type(e).__name__)
 
 
+def stitch_tiles(rng, cache_dir: str):
+    """Downloads and joins the tiles into one image. Returns (range used, RGBA array with row 0 at the south edge)."""
+    used, blobs = tiles.fetch(rng, cache_dir)
+    canvas = QtGui.QImage(used.cols * tiles.TILE_PX, used.rows * tiles.TILE_PX, QtGui.QImage.Format_RGBA8888)
+    canvas.fill(QtGui.QColor(SURFACE))
+    painter = QtGui.QPainter(canvas)
+    drawn = 0
+    for (x, y), data in blobs.items():
+        img = QtGui.QImage()
+        if data and img.loadFromData(data):
+            painter.drawImage(QtCore.QRect((x - used.x0) * tiles.TILE_PX, (y - used.y0) * tiles.TILE_PX,
+                                           tiles.TILE_PX, tiles.TILE_PX), img)
+            drawn += 1
+    painter.end()
+    if drawn == 0:
+        raise OSError("the map service returned no usable images")
+    w, h = canvas.width(), canvas.height()
+    buf = np.frombuffer(canvas.constBits(), dtype=np.uint8, count=h * canvas.bytesPerLine())
+    arr = buf.reshape(h, canvas.bytesPerLine())[:, :w * 4].reshape(h, w, 4)
+    return used, np.ascontiguousarray(arr[::-1])
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, persist: bool = True):
         super().__init__()
@@ -195,6 +217,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._updating = False
         self._lap_lines: list = []
         self._gate_items: list = []
+        self.satellite = True
+        self._sat_cache: dict = {}
+        self._sat_pending: set = set()
+        self._sat_status = ""
         self._load_settings()
 
         self._build()
@@ -314,6 +340,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 }
         except Exception:  # noqa: BLE001 - a damaged settings entry must not stop the app opening
             self.gates = {}
+        self.satellite = str(self.settings.value("satellite", "true")).lower() != "false"
         u = self.settings.value("unit", "km/h")
         self.unit = u if u in UNITS else "km/h"
 
@@ -325,6 +352,7 @@ class MainWindow(QtWidgets.QMainWindow):
                for k, g in self.gates.items()}
         self.settings.setValue("gates", json.dumps(raw))
         self.settings.setValue("unit", self.unit)
+        self.settings.setValue("satellite", "true" if self.satellite else "false")
 
     # ------------------------------------------------------------ build
 
@@ -347,6 +375,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.color_box = QtWidgets.QComboBox()
         self.color_box.addItems(["Speed", "Acceleration / braking", "Cornering"])
         self.color_box.currentIndexChanged.connect(lambda _: self._draw_track())
+        self.map_box = QtWidgets.QComboBox()
+        self.map_box.addItems(["Satellite", "Plain"])
+        self.map_box.setCurrentIndex(0 if self.satellite else 1)
+        self.map_box.currentIndexChanged.connect(self._map_style_changed)
         self.x_box = QtWidgets.QComboBox()
         self.x_box.addItems(["Time", "Distance"])
         self.x_box.currentIndexChanged.connect(lambda _: self._draw_traces())
@@ -356,6 +388,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_btn.setFlat(True)
         self.update_btn.clicked.connect(lambda: self.check_updates(manual=True))
         outer.addLayout(row(self.open_btn, self.heading, None, self.update_btn,
+                            label("Map", "muted"), self.map_box,
                             label("Colour track by", "muted"), self.color_box,
                             label("Graphs against", "muted"), self.x_box,
                             label("Units", "muted"), self.unit_box, spacing=8))
@@ -427,6 +460,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.map.hideButtons()
         self.map.hideAxis("left")
         self.map.hideAxis("bottom")
+        self.sat_item = pg.ImageItem(axisOrder="row-major")
+        self.sat_item.setZValue(-10)
+        self.sat_item.setVisible(False)
+        self.map.addItem(self.sat_item, ignoreBounds=True)
         self.hl_item = pg.PlotDataItem(pen=pg.mkPen("#FFFFFF", width=11, cap=Qt.RoundCap, join=Qt.RoundJoin))
         self.hl_item.setOpacity(0.55)
         self.hl_item.setZValue(1)
@@ -440,13 +477,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.scale.setParentItem(self.map.getPlotItem().vb)
         self.scale.anchor((1, 1), (1, 1), offset=(-20, -16))
         self.legend = label("", "muted")
+        self.credit = label("", "muted")
+        self.credit.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.map.scene().sigMouseClicked.connect(self._map_clicked)
         mp = QtWidgets.QWidget()
         ml = QtWidgets.QVBoxLayout(mp)
         ml.setContentsMargins(0, 0, 0, 0)
         ml.setSpacing(4)
         ml.addWidget(self.map, 1)
-        ml.addWidget(self.legend)
+        ml.addLayout(row(self.legend, None, self.credit))
         split.addWidget(mp)
 
         self.tabs = QtWidgets.QTabWidget()
@@ -590,7 +629,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lap_table.setShowGrid(False)
         hh = self.lap_table.horizontalHeader()
         hh.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-        hh.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        for c in (0, 1, 2):
+            hh.setSectionResizeMode(c, QtWidgets.QHeaderView.ResizeToContents)
         self.lap_table.setMinimumHeight(170)
         self.lap_table.itemSelectionChanged.connect(self._laps_selected)
         self.whole_btn = QtWidgets.QPushButton("Whole run")
@@ -721,6 +761,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.width_box.blockSignals(False)
         self._draw_info()
         self._draw_track()
+        self._draw_satellite()
         self._draw_traces()
         self._draw_gg_cloud()
         self._recompute_laps()
@@ -776,7 +817,67 @@ class MainWindow(QtWidgets.QMainWindow):
             cols = [diverging_color(v / peak) for v in arr[idx]]
             what = "green = accelerating,  red = braking" if mode == 1 else "green = turning left,  red = turning right"
             self.legend.setText(f"{what}  (full colour at {peak / G:.2f} g).   Click the track to move the car there.")
-        self.track_item.setData(x=r.x[idx], y=r.y[idx], brush=[pg.mkBrush(c) for c in cols])
+        self.track_item.setData(x=r.x[idx], y=r.y[idx], brush=[pg.mkBrush(c) for c in cols],
+                                size=7 if self.satellite else 6)
+
+    # ------------------------------------------------------------ satellite
+
+    def _map_style_changed(self, i: int):
+        self.satellite = i == 0
+        self._save_settings()
+        self._draw_track()
+        self._draw_satellite()
+
+    def _tile_cache_dir(self) -> str:
+        base = QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.GenericCacheLocation) or os.path.expanduser("~")
+        return os.path.join(base, "OBRA-Run-Analyzer", "tiles")
+
+    def _draw_satellite(self):
+        r = self.run
+        self.sat_item.setVisible(False)
+        self.credit.setText("")
+        if r is None or not self.satellite:
+            return
+        box = tiles.padded_box(float(r.lat.min()), float(r.lat.max()), float(r.lon.min()), float(r.lon.max()))
+        rng = tiles.range_for(*box)
+        if rng in self._sat_cache:
+            self._place_satellite(r, *self._sat_cache[rng])
+            return
+        self.credit.setText("Loading satellite image…")
+        if rng in self._sat_pending:
+            return
+        self._sat_pending.add(rng)
+        cache_dir = self._tile_cache_dir()
+        th = Worker(lambda: stitch_tiles(rng, cache_dir))
+        th.done.connect(lambda res: self._satellite_ready(rng, res))
+        th.failed.connect(lambda msg: self._satellite_failed(rng, msg))
+        self._keep(th)
+        th.start()
+
+    def _satellite_ready(self, rng, res):
+        self._sat_pending.discard(rng)
+        self._sat_cache[rng] = res
+        self._sat_status = f"satellite ok zoom={res[0].z} tiles={res[0].count} image={res[1].shape[1]}x{res[1].shape[0]}"
+        if self.run is not None and self.satellite:
+            r = self.run
+            box = tiles.padded_box(float(r.lat.min()), float(r.lat.max()), float(r.lon.min()), float(r.lon.max()))
+            if tiles.range_for(*box) == rng:
+                self._place_satellite(r, *res)
+
+    def _satellite_failed(self, rng, msg: str):
+        self._sat_pending.discard(rng)
+        self._sat_status = f"satellite failed: {msg}"
+        if self.satellite:
+            self.credit.setText("No satellite image (offline?). Showing the plain map.")
+
+    def _place_satellite(self, r: Run, used, arr):
+        south, west, north, east = used.bounds()
+        xs, ys = to_local(np.array([south, north]), np.array([west, east]), r.lat[0], r.lon[0])
+        self.sat_item.setImage(arr, autoLevels=False, levels=(0, 255))
+        self.sat_item.setRect(QtCore.QRectF(float(xs[0]), float(ys[0]), float(xs[1] - xs[0]), float(ys[1] - ys[0])))
+        self.sat_item.setOpacity(0.92)
+        self.sat_item.setVisible(True)
+        self.credit.setText(tiles.ATTRIBUTION)
 
     def _xs(self) -> np.ndarray:
         return self.run.dist if self.x_box.currentIndex() == 1 else self.run.t
@@ -1212,6 +1313,10 @@ def run_selftest(win: MainWindow, app: QtWidgets.QApplication, out_dir: str, pat
             win._gate_at_cursor("start")
             log.append(f"laps={[round(l.time, 3) for l in win.laps]}")
             win.seek(r.t[0] + r.duration * 0.6)
+            deadline = QtCore.QDeadlineTimer(25000)
+            while win._sat_pending and not deadline.hasExpired():
+                app.processEvents(QtCore.QEventLoop.AllEvents, 50)
+            log.append(win._sat_status or "satellite: no result")
             app.processEvents()
             win.grab().save(os.path.join(out_dir, "selftest-run.png"))
             if win.laps:
