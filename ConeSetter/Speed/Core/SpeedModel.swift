@@ -60,10 +60,23 @@ struct SpeedRun: Codable, Identifiable, Equatable {
     var imuUsed: Bool
     var notes: String = ""
     var baro: [BaroSample]? = nil
+    /// Who drove. Optional so runs saved before 1.5 still load.
+    var driver: String? = nil
+    /// Event or kind of run, e.g. "Skidpad". Free text; see `RunType.presets`.
+    var runType: String? = nil
+
+    var driverText: String { (driver ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    var runTypeText: String { (runType ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    var notesText: String { notes.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var hasBarometer: Bool { (baro?.count ?? 0) > 1 }
 
     var duration: Double { max(samples.last?.t ?? 0, fixes.last?.t ?? 0) }
+}
+
+enum RunType {
+    /// Quick picks offered when tagging a run. Any other text is allowed too.
+    static let presets = ["Acceleration", "Skidpad", "Autocross", "Trackdrive", "Endurance", "Brake test", "Shakedown", "Practice"]
 }
 
 enum SpeedUnit: String, Codable, CaseIterable, Identifiable {

@@ -381,5 +381,52 @@ try? gpsXlsx.write(to: outDir.appendingPathComponent("Sample-export-gps-only.xls
 try? RunExcelExporter.csv(run: fusedA.run, unit: .kmh).write(to: outDir.appendingPathComponent("sample.csv"), atomically: true, encoding: .utf8)
 try? RunExcelExporter.gpx(run: fusedA.run).write(to: outDir.appendingPathComponent("sample.gpx"), atomically: true, encoding: .utf8)
 
+// Run details + multi-run zip
+print("\n== Run details and zip bundle")
+do {
+    var a = fusedA.run
+    RunDetails(name: "Run · 15 Nov 14:30", driver: " Machu ", runType: "Skidpad",
+               notes: "Fronts 0.8 bar, \"damp\" track\nSecond line, with comma").apply(to: &a)
+    var b = gpsOnly.run
+    RunDetails(name: "Run · 15 Nov 14:30", driver: "Machu", runType: "Skidpad").apply(to: &b)
+    var c = gpsOnly.run
+    RunDetails(name: "Plain/run: 3").apply(to: &c)
+    check(a.driver == "Machu" && a.runType == "Skidpad" && c.driver == nil, "details trimmed and stored")
+    check(RunBundle.fileBase(a) == "Run - 15 Nov 14-30 - Machu - Skidpad", "file name from details: \(RunBundle.fileBase(a))")
+    check(RunBundle.fileBase(c) == "Plain-run- 3", "file name sanitised: \(RunBundle.fileBase(c))")
+
+    let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
+    let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+    let back = try dec.decode(SpeedRun.self, from: enc.encode(a))
+    check(back.driver == "Machu" && back.runType == "Skidpad" && back.notes == a.notes, "details JSON round trip")
+    // A run saved by an older build has no driver / runType keys.
+    var legacy = try JSONSerialization.jsonObject(with: enc.encode(a)) as! [String: Any]
+    legacy.removeValue(forKey: "driver"); legacy.removeValue(forKey: "runType")
+    let old = try dec.decode(SpeedRun.self, from: JSONSerialization.data(withJSONObject: legacy))
+    check(old.driver == nil && old.samples.count == a.samples.count, "runs saved before 1.5 still load")
+
+    var taken = Set<String>()
+    var files: [RunBundle.File] = []
+    var bases: [String] = []
+    for run in [a, b, c] {
+        let base = RunBundle.uniqueName(RunBundle.fileBase(run), taken: &taken)
+        bases.append(base)
+        files.append(.init(name: "\(base).xlsx", data: RunExcelExporter.workbook(run: run, unit: .kmh)))
+        files.append(.init(name: "\(base).csv", data: Data(RunExcelExporter.csv(run: run, unit: .kmh).utf8)))
+        files.append(.init(name: "\(base).gpx", data: Data(RunExcelExporter.gpx(run: run).utf8)))
+    }
+    check(Set(bases).count == 3 && bases[1].hasSuffix("(2)"), "duplicate names made unique: \(bases)")
+    let index = RunBundle.indexCSV(runs: [a, b, c], files: bases, unit: .kmh)
+    check(index.contains("\"Fronts 0.8 bar, \"\"damp\"\" track"), "index CSV quotes notes")
+    check(RunExcelExporter.gpx(run: a).contains("<desc>Driver: Machu | Type: Skidpad"), "GPX carries details")
+    files.insert(.init(name: "Runs.csv", data: Data(index.utf8)), at: 0)
+    let zip = RunBundle.zip(files)
+    check(zip.count > 20_000 && zip.prefix(2) == Data([0x50, 0x4B]), "zip of 3 runs built (\(zip.count) bytes, \(files.count) files)")
+    try zip.write(to: outDir.appendingPathComponent("Sample-runs.zip"))
+    try RunExcelExporter.workbook(run: a, unit: .kmh, images: images).write(to: outDir.appendingPathComponent("Sample-export-details.xlsx"))
+} catch {
+    check(false, "run details and zip: \(error)")
+}
+
 print(failures.isEmpty ? "\nALL CHECKS PASSED" : "\n\(failures.count) CHECK(S) FAILED")
 exit(failures.isEmpty ? 0 : 1)

@@ -23,8 +23,7 @@ struct RunDetailView: View {
     @State private var showAdvanced = false
     @State private var exporting: String?
     @State private var share: ShareItem?
-    @State private var renaming = false
-    @State private var newName = ""
+    @State private var editing = false
     @State private var confirmDelete = false
     @State private var exportError: String?
 
@@ -51,10 +50,7 @@ struct RunDetailView: View {
                     Button { export(.csv) } label: { Label("Export CSV", systemImage: "doc.plaintext") }
                     Button { export(.gpx) } label: { Label("Export GPX", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
                     Divider()
-                    Button {
-                        newName = run?.name ?? summary.name
-                        renaming = true
-                    } label: { Label("Rename", systemImage: "pencil") }
+                    Button { editing = true } label: { Label("Name, driver, type and notes", systemImage: "square.and.pencil") }
                     Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
                 } label: {
                     Image(systemName: "square.and.arrow.up")
@@ -73,15 +69,15 @@ struct RunDetailView: View {
             }
         }
         .sheet(item: $share) { ActivityView(items: [$0.url]) }
-        .alert("Rename run", isPresented: $renaming) {
-            TextField("Name", text: $newName)
-            Button("Save") {
-                let name = newName.trimmingCharacters(in: .whitespaces)
-                guard !name.isEmpty else { return }
-                run?.name = name
-                Task { await RunStore.shared.rename(summary.id, to: name) }
+        .sheet(isPresented: $editing) {
+            if let current = run {
+                RunDetailsSheet(details: RunDetails(run: current)) { d in
+                    var updated = current
+                    d.apply(to: &updated)
+                    run = updated
+                    RunStore.shared.save(updated)
+                }
             }
-            Button("Cancel", role: .cancel) {}
         }
         .confirmationDialog("Delete this run?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
@@ -105,6 +101,7 @@ struct RunDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 hero(run, st)
+                detailsCard(run)
 
                 VStack(alignment: .leading, spacing: 8) {
                     HeatmapMap(coords: mapCoords, speeds: mapSpeeds, top: st.topSpeed, marker: markerCoordinate)
@@ -229,6 +226,38 @@ struct RunDetailView: View {
         .shadow(color: Theme.accent.opacity(0.3), radius: 16, y: 8)
     }
 
+    /// Driver, run type and notes, or a prompt to add them.
+    private func detailsCard(_ run: SpeedRun) -> some View {
+        let empty = run.driverText.isEmpty && run.runTypeText.isEmpty && run.notesText.isEmpty
+        return Button { editing = true } label: {
+            HStack(alignment: .top, spacing: 12) {
+                IconBadge(systemImage: empty ? "square.and.pencil" : "note.text")
+                VStack(alignment: .leading, spacing: 6) {
+                    if empty {
+                        Text("Add driver, run type and notes").font(.subheadline.weight(.semibold))
+                        Text("They show in the run list and go into the exports.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        if !run.driverText.isEmpty || !run.runTypeText.isEmpty {
+                            RunTags(driver: run.driverText, runType: run.runTypeText)
+                        }
+                        if !run.notesText.isEmpty {
+                            Text(run.notesText)
+                                .font(.subheadline)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "pencil").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+            }
+            .card(padding: 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     private func heroFigure(_ value: String, _ label: String) -> some View {
         VStack(alignment: .trailing, spacing: 0) {
             Text(value).font(.system(.title3, design: .rounded).weight(.bold)).monospacedDigit()
@@ -345,10 +374,7 @@ struct RunDetailView: View {
         guard let run else { return }
         let unit = self.unit
         let skip = self.skip
-        let base = run.name
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-            .replacingOccurrences(of: "·", with: "-")
+        let base = RunBundle.fileBase(run)
         Task {
             exporting = kind == .xlsx ? "Building Excel workbook…" : "Exporting…"
             defer { exporting = nil }
