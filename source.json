@@ -23,6 +23,15 @@
       "screenshots": [],
       "versions": [
         {
+          "version": "2.1.0",
+          "buildVersion": "14",
+          "date": "2026-11-15T19:55:03Z",
+          "localizedDescription": "FarLink tab restyled to match the rest of the app; analyzer tidy-ups for small windows",
+          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v2.1.0-b14/ConeSetter.ipa",
+          "size": 6236976,
+          "minOSVersion": "18.0"
+        },
+        {
           "version": "2.0.0",
           "buildVersion": "12",
           "date": "2026-11-15T19:32:51Z",
@@ -104,11 +113,11 @@
           "NSBluetoothAlwaysUsageDescription": "OBRA Essentials uses Bluetooth in the FarLink tab to read and configure a FarDriver motor controller."
         }
       },
-      "version": "2.0.0",
-      "versionDate": "2026-11-15T19:32:51Z",
-      "versionDescription": "OBRA Essentials 2.0: app renamed, FarLink built in as a fourth tab (Cones, GPS, 3D, FarLink)",
-      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v2.0.0-b12/ConeSetter.ipa",
-      "size": 6222658
+      "version": "2.1.0",
+      "versionDate": "2026-11-15T19:55:03Z",
+      "versionDescription": "FarLink tab restyled to match the rest of the app; analyzer tidy-ups for small windows",
+      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v2.1.0-b14/ConeSetter.ipa",
+      "size": 6236976
     }
   ],
   "news": []
