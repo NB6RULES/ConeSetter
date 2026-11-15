@@ -15,7 +15,8 @@ Plays back and analyses the speed runs recorded by the phone app.
    - Start line only: a circuit. Every crossing ends one lap and starts the next.
    - Start and a separate finish line: each pass from start to finish is timed (acceleration, sprint, autocross).
    - Lines are stored by location, so every run at the same site uses them.
-5. **Laps:** click a lap to play only that lap. Ctrl-click several to overlay them in *Lap compare*, with time gained or lost against the fastest of them. *Export laps…* writes a CSV.
+5. **Map:** the track is drawn over satellite imagery (Esri World Imagery). It needs an internet connection the first time a site is opened; after that the images are kept on the PC, so they still show at a track with no signal. Without a connection the map falls back to the plain background. Switch with **Map: Satellite / Plain** at the top.
+6. **Laps:** click a lap to play only that lap. Ctrl-click several to overlay them in *Lap compare*, with time gained or lost against the fastest of them. *Export laps…* writes a CSV.
 
 Crossing times are interpolated between samples, so lap times resolve finer than the 10 Hz data rate. They are only as accurate as the GPS / IMU positions.
 

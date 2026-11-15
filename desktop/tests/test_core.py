@@ -116,6 +116,28 @@ with tempfile.TemporaryDirectory() as tmp:
     runs, problems = data.load_path(notzip)
     check(not runs and len(problems) == 1, f"broken zip gives a clear message: {problems}")
 
+print("== Satellite tiles")
+from analyzer import tiles  # noqa: E402
+lx, ly = tiles.tile_xy(51.5074, -0.1278, 10)
+check((int(lx), int(ly)) == (511, 340), f"Web Mercator tile for central London at zoom 10: {int(lx)}, {int(ly)}")
+tx, ty = tiles.tile_xy(51.7551, -1.2242, 17)
+la, lo = tiles.tile_latlon(tx, ty, 17)
+check(abs(la - 51.7551) < 1e-9 and abs(lo + 1.2242) < 1e-9, "tile coordinates round trip")
+box = tiles.padded_box(51.7545, 51.7557, -1.2252, -1.2232)
+rng = tiles.range_for(*box)
+s_, w_, n_, e_ = rng.bounds()
+check(rng.count <= tiles.MAX_TILES and rng.z >= 17, f"zoom chosen for a 140 m site: z{rng.z}, {rng.cols}x{rng.rows} tiles")
+check(s_ <= box[0] and w_ <= box[1] and n_ >= box[2] and e_ >= box[3], "tiles cover the whole padded track")
+calls = []
+def fake(z, x, y, cache, timeout):                       # deepest level has no imagery: same placeholder everywhere
+    calls.append(z)
+    return b"placeholder" if z == rng.z else f"{z}/{x}/{y}".encode()
+used, blobs = tiles.fetch(rng, None, fetcher=fake)
+check(used.z == rng.z - 1 and len(blobs) == used.count and len(set(blobs.values())) == used.count,
+      "steps out a zoom level when the service has no imagery at full depth")
+us, uw, un, ue = used.bounds()
+check(us <= box[0] and uw <= box[1] and un >= box[2] and ue >= box[3], "the shallower tiles still cover the track")
+
 print("== Updates")
 from analyzer import updater  # noqa: E402
 rel = updater.parse_manifest('{"version": "1.2.0", "build": 14, "url": "https://example.invalid/a.exe", "notes": "n", "size": "5"}')
