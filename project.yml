@@ -6,7 +6,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "1.5.0"
+    MARKETING_VERSION: "2.0.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
@@ -27,7 +27,7 @@ targets:
     info:
       path: Support/Info.plist
       properties:
-        CFBundleDisplayName: Cone Setter
+        CFBundleDisplayName: OBRA Essentials
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
@@ -37,10 +37,11 @@ targets:
         UIApplicationSupportsIndirectInputEvents: true
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
-        NSCameraUsageDescription: Cone Setter uses the camera and LiDAR to show where each cone goes on the ground.
-        NSLocationWhenInUseUsageDescription: Cone Setter uses GPS to record speed runs and to tag saved track layouts with the site location.
-        NSMotionUsageDescription: Cone Setter uses the motion sensors and barometer for 10 Hz speed, g-force and elevation logging.
-        UIBackgroundModes: [location]
+        NSCameraUsageDescription: OBRA Essentials uses the camera and LiDAR to show where each cone goes on the ground.
+        NSLocationWhenInUseUsageDescription: OBRA Essentials uses GPS to record speed runs and to tag saved track layouts with the site location.
+        NSMotionUsageDescription: OBRA Essentials uses the motion sensors and barometer for 10 Hz speed, g-force and elevation logging.
+        NSBluetoothAlwaysUsageDescription: OBRA Essentials uses Bluetooth in the FarLink tab to read and configure a FarDriver motor controller.
+        UIBackgroundModes: [location, bluetooth-central]
         CFBundleDocumentTypes:
           - CFBundleTypeName: 3D model or CAD file
             CFBundleTypeRole: Viewer

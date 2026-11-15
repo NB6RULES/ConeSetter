@@ -1,10 +1,17 @@
-# Cone Setter
+# OBRA Essentials
 
 > **Downloads**
 > - **Windows run analyzer:** [OBRA-Run-Analyzer.exe](https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe) (always the newest build; it updates itself)
 > - **iPhone app:** add `https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json` as a source in SideStore
 
-iPhone app that uses ARKit and the LiDAR scanner to lay out Formula Student / FS-AI test tracks. It shows a ghost cone on the ground for every cone in the layout, guides you to it, and uses each cone you place as a reference for the next ones.
+iPhone toolkit for Oxford Brookes Racing Autonomous, formerly called Cone Setter. Four tabs:
+
+- **Cones:** uses ARKit and the LiDAR scanner to lay out Formula Student / FS-AI test tracks. It shows a ghost cone on the ground for every cone in the layout, guides you to it, and uses each cone you place as a reference for the next ones.
+- **GPS:** 10 Hz speed logger with a heatmap track, graphs and exports.
+- **3D:** offline CAD and 3D file viewer.
+- **FarLink:** dashboard, tuning and registers for FarDriver motor controllers over Bluetooth.
+
+The app keeps the bundle ID `com.nb6rules.conesetter` and this repository name, so SideStore updates the existing install in place and saved sessions and runs stay.
 
 Built for the iPhone 17 Pro Max. Works on any LiDAR iPhone on iOS 18 or later.
 
@@ -30,7 +37,7 @@ The top-left chips show tracking state, LiDAR mapping, phone GPS accuracy, and t
 
 Sessions save the progress, the ARKit world map and a GPS site tag. On a later test day, open the session and walk around: if the saved map is recognised, it carries on; otherwise tap A and B again and it restores the cones you already placed.
 
-## Speed tab (speed logger)
+## GPS tab (speed logger)
 
 Records the car's speed with timestamps and coordinates, and keeps running with the screen locked.
 
@@ -43,6 +50,12 @@ Records the car's speed with timestamps and coordinates, and keeps running with 
 - Runs autosave every 30 s. A run cut off by the app closing is recovered the next time the Speed tab opens.
 
 CI runs `Tests/Harness/main.swift`, which simulates laps with noisy GPS, IMU and barometer and an arbitrary phone mount, before every build. Its outputs, including a sample Excel export, are attached to the `ci-test` pre-release.
+
+## FarLink tab (FarDriver motor controllers)
+
+FarLink, previously a separate app ([NB6RULES/Farlink](https://github.com/NB6RULES/Farlink)), is built in as the fourth tab. The connection bar at the top opens the scanner (or a demo controller). Below it, **Dash** shows live speed, power, battery, currents and temperatures; **Tune** edits the catalogued parameters; **Registers** reads and writes raw registers and shows the traffic log; **Settings** covers the handshake, units, wheel size and write safety. Bluetooth permission is only asked for the first time this tab is opened. Settings from the standalone FarLink app are not carried over.
+
+The protocol code is checked in CI by `Tests/FarLinkHarness/main.swift`. It is built on community reverse-engineering of the FarDriver protocol (jackhumbert/fardriver-controllers) and is not affiliated with Nanjing FarDriver.
 
 ## Windows run analyzer
 

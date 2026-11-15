@@ -89,6 +89,8 @@ jobs:
           $title = "OBRA Run Analyzer for Windows: $v (build $build)"
           $notes = "Windows app to play back and analyse speed runs from the phone app. Download **OBRA-Run-Analyzer.exe** and run it (no installer). It checks for updates itself. demo-runs.zip is sample data to try. This entry is replaced by every new build."
           Copy-Item sample\demo-runs.zip demo-runs.zip
+          # The first build was published under its own tag before the rolling tag existed.
+          gh release delete analyzer-v1.0.0-b1 --cleanup-tag -y *> $null
           gh release view analyzer-latest *> $null
           if ($LASTEXITCODE -ne 0) { gh release create analyzer-latest --title $title --notes $notes --latest=false --target $env:GITHUB_SHA }
           gh release upload analyzer-latest "dist\OBRA-Run-Analyzer.exe" demo-runs.zip selftest-out\selftest-run.png selftest-out\selftest-compare.png selftest-out\selftest.txt --clobber

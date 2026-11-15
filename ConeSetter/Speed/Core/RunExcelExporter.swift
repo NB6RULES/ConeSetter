@@ -29,7 +29,7 @@ enum RunExcelExporter {
         // MARK: Summary
         let sum = wb.addSheet("Summary")
         sum.widths = [0: 30, 1: 24, 2: 10, 3: 3]
-        sum.set(0, [.t("Cone Setter · Speed run", .title)])
+        sum.set(0, [.t("OBRA Essentials · Speed run", .title)])
         sum.set(1, [.t(run.name, .subtitle)])
         sum.set(2, [.t("Recorded", .bold), .number(excelDate(run.startDate), .dateTime)])
         sum.set(3, [.t("Data source", .bold), .t(stats.fusedFraction > 0.5 ? "GPS + IMU fusion (10 Hz)" : "GPS only")])
@@ -302,7 +302,7 @@ enum RunExcelExporter {
     static func gpx(run: SpeedRun) -> String {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var x = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\" creator=\"Cone Setter\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n"
+        var x = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\" creator=\"OBRA Essentials\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n"
         func esc(_ s: String) -> String {
             s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
         }
