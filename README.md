@@ -40,6 +40,10 @@ Records the car's speed with timestamps and coordinates, and keeps running with 
 
 CI runs `Tests/Harness/main.swift`, which simulates laps with noisy GPS, IMU and barometer and an arbitrary phone mount, before every build. Its outputs, including a sample Excel export, are attached to the `ci-test` pre-release.
 
+## Windows run analyzer
+
+`desktop/` holds **OBRA Run Analyzer**, a Windows app that plays runs back and times laps between start and finish lines you place on the track. See [desktop/README.md](desktop/README.md).
+
 ## 3D tab (CAD and 3D file viewer)
 
 Opens 3D files offline, from the in-app picker or by sharing a file to Cone Setter from the Files app.
