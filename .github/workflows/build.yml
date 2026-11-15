@@ -110,7 +110,7 @@ jobs:
         run: |
           NOTES=$(git log -1 --pretty=%s)
           gh release create "$TAG" ConeSetter.ipa \
-            --title "Cone Setter $VERSION (build $BUILD)" \
+            --title "OBRA Essentials $VERSION (build $BUILD)" \
             --notes "$NOTES" \
             --target "$GITHUB_SHA"
           echo "NOTES=$NOTES" >> "$GITHUB_ENV"

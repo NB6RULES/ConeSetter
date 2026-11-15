@@ -60,6 +60,7 @@ QSlider::sub-page:horizontal {{ background: {ACCENT}; border-radius: 3px; }}
 QSlider::handle:horizontal {{ width: 16px; margin: -6px 0; border-radius: 8px; background: white; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; }}
 QSplitter::handle {{ background: {BG}; }}
+QScrollArea {{ background: {BG}; border: none; }}
 QToolTip {{ background: {SURFACE_HI}; color: {TEXT}; border: 1px solid #34353E; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; }}
 QScrollBar::handle:vertical {{ background: #3A3B45; border-radius: 5px; min-height: 24px; }}
@@ -177,7 +178,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle(f"OBRA Run Analyzer {__version__}")
         self.resize(1500, 920)
-        self.setMinimumSize(1100, 700)
+        self.setMinimumSize(1000, 640)
         self.setAcceptDrops(True)
         self.persist = persist
         self.settings = QtCore.QSettings("OBRA", "RunAnalyzer")
@@ -590,7 +591,7 @@ class MainWindow(QtWidgets.QMainWindow):
         hh = self.lap_table.horizontalHeader()
         hh.setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         hh.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
-        self.lap_table.setMinimumHeight(96)
+        self.lap_table.setMinimumHeight(170)
         self.lap_table.itemSelectionChanged.connect(self._laps_selected)
         self.whole_btn = QtWidgets.QPushButton("Whole run")
         self.whole_btn.clicked.connect(self.lap_table.clearSelection)
@@ -599,8 +600,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lap_summary = label("", "muted", wrap=True)
         lp = panel(self.lap_table, self.lap_summary, row(self.whole_btn, None, self.export_btn), title="Laps")
         lay.addWidget(lp, 1)
-        w.setMinimumWidth(360)
-        return w
+        w.setObjectName("root")
+        # On small or scaled-up screens the column scrolls instead of squashing its contents.
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidget(w)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setMinimumWidth(372)
+        return scroll
 
     def _build_transport(self) -> QtWidgets.QWidget:
         self.play_btn = QtWidgets.QPushButton("▶  Play")
@@ -1192,6 +1200,9 @@ def run_selftest(win: MainWindow, app: QtWidgets.QApplication, out_dir: str, pat
     log = []
     ok = True
     try:
+        size = os.environ.get("OBRA_TEST_SIZE")
+        if size:
+            win.resize(*(int(v) for v in size.split("x")))
         problems = win.open_files(paths, quiet=True)
         log.append(f"runs={len(win.runs)} problems={problems}")
         ok &= len(win.runs) > 0 and not problems
