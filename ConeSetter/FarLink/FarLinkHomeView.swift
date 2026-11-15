@@ -1,12 +1,15 @@
 import SwiftUI
 
-/// FarLink colours. The FarLink tab keeps its own lime accent, so "connected" reads as green.
+/// FarLink colours, built on the app theme: orange accent, with green / yellow / red kept for status.
 enum FLTheme {
-    static let accent = Color(red: 0.75, green: 1.0, blue: 0.25)     // electric lime
-    static let warn = Color.orange
+    static let accent = Theme.accent
+    static let ok = Color.green
+    static let warn = Color.yellow
     static let danger = Color(red: 1.0, green: 0.3, blue: 0.3)
     static let regen = Color(red: 0.3, green: 0.8, blue: 1.0)
-    static let tile = Color.white.opacity(0.06)
+    static let tile = Theme.surface
+    /// Unfilled part of gauges and bars.
+    static let track = Color.white.opacity(0.08)
 }
 
 /// One Bluetooth link for the whole app, created the first time the FarLink tab is opened so the
@@ -46,13 +49,20 @@ private struct FarLinkRoot: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Text("FarLink")
+                .font(.largeTitle.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
             ConnectionBar { showConnect = true }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
             Picker("Page", selection: $page) {
                 ForEach(Page.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
 
             Group {
                 switch page {
@@ -83,25 +93,29 @@ struct ConnectionBar: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 10) {
-                Circle().fill(dotColor).frame(width: 9, height: 9)
-                Text(link.state.label).font(.subheadline.weight(.semibold)).lineLimit(1)
+                IconBadge(systemImage: "bolt.horizontal.fill", tint: dotColor, size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("CONTROLLER")
+                        .font(.system(size: 9, weight: .bold, design: .rounded)).tracking(1.2)
+                        .foregroundStyle(.secondary)
+                    Text(link.state.label).font(.subheadline.weight(.semibold)).lineLimit(1)
+                }
                 Spacer()
                 if link.state.isLive {
-                    Text(String(format: "%.0f fr/s", link.framesPerSecond))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(link.framesPerSecond > 0 ? .secondary : FLTheme.warn)
+                    Chip(text: String(format: "%.0f fr/s", link.framesPerSecond), systemImage: "waveform",
+                         tint: link.framesPerSecond > 0 ? .green : FLTheme.warn)
                 }
-                Image(systemName: "chevron.down").font(.caption).foregroundStyle(.secondary)
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 16).padding(.vertical, 10)
-            .background(.ultraThinMaterial)
+            .card(padding: 12)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
     private var dotColor: Color {
         switch link.state {
-        case .connected: link.framesPerSecond > 0 ? FLTheme.accent : FLTheme.warn
+        case .connected: link.framesPerSecond > 0 ? FLTheme.ok : FLTheme.warn
         case .demo: FLTheme.regen
         case .connecting, .scanning: FLTheme.warn
         case .failed, .bluetoothOff: FLTheme.danger
@@ -166,6 +180,7 @@ struct ConnectSheet: View {
                     }
                 }
             }
+            .themedList()
             .navigationTitle("Controller")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }

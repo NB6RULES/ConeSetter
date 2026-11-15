@@ -18,8 +18,8 @@ struct FarLinkRegistersView: View {
 
                 if mode == 0 { registerList } else { TrafficLog() }
             }
+            .background(Theme.background.ignoresSafeArea())
             .navigationTitle("Registers")
-            .navigationBarTitleDisplayMode(.inline)
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $editAddr) { a in RawRegisterEditor(address: a.value) }
         }
@@ -42,11 +42,13 @@ struct FarLinkRegistersView: View {
                     }
                     .foregroundStyle(.primary)
                 }
+                .listRowBackground(Color.clear)
             } footer: {
                 Text("0x00–0xD5 are settings; 0xD6 and up are live status. Labels come from the community register map and some are guesses.")
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .searchable(text: $filter, prompt: "Address or name")
     }
 
@@ -126,6 +128,7 @@ struct RawRegisterEditor: View {
                     else if let p = link.pendingWrites[address] { Text(statusText(p.status)) }
                 }
             }
+            .themedList()
             .navigationTitle(String(format: "Register 0x%02X", address))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
@@ -172,13 +175,15 @@ struct TrafficLog: View {
                 List(link.log) { e in
                     HStack(alignment: .top, spacing: 8) {
                         Text(e.dir.rawValue).font(.caption2.monospaced().bold())
-                            .foregroundStyle(e.dir == .tx ? FLTheme.warn : e.dir == .rx ? FLTheme.accent : .secondary)
+                            .foregroundStyle(e.dir == .tx ? FLTheme.accent : e.dir == .rx ? FLTheme.ok : .secondary)
                         Text(e.text).font(.caption2.monospaced()).textSelection(.enabled)
                     }
                     .id(e.id)
                     .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                    .listRowBackground(Color.clear)
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .onChange(of: link.log.count) {
                     if !link.logPaused, let last = link.log.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }

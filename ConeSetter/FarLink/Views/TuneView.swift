@@ -44,6 +44,7 @@ struct FarLinkTuneView: View {
                     Text("Some settings (direction, rated voltage, pole pairs) only take effect after a reset. Afterwards, power-cycle the controller and reconnect to confirm the new values were kept.")
                 }
             }
+            .themedList()
             .navigationTitle("Tune")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $editing) { def in ParamEditSheet(def: def) }
@@ -91,7 +92,7 @@ struct WriteStatusIcon: View {
         switch status {
         case .none: EmptyView()
         case .sending?, .waiting?: ProgressView().controlSize(.small)
-        case .verified?: Image(systemName: "checkmark.circle.fill").foregroundStyle(FLTheme.accent)
+        case .verified?: Image(systemName: "checkmark.circle.fill").foregroundStyle(FLTheme.ok)
         case .mismatch?, .timedOut?, .failed?: Image(systemName: "xmark.octagon.fill").foregroundStyle(FLTheme.danger)
         }
     }
@@ -171,6 +172,7 @@ struct ParamEditSheet: View {
                     LabeledContent("Raw", value: String(format: "0x%04X", link.memory.u16(def.address)))
                 }
             }
+            .themedList()
             .navigationTitle(def.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
@@ -200,7 +202,7 @@ struct ParamEditSheet: View {
         } else if sent, let p = link.pendingWrites[def.address] {
             switch p.status {
             case .sending, .waiting: Text("Sent — waiting for the controller to report the new value…")
-            case .verified: Text("Controller confirmed the new value.").foregroundStyle(FLTheme.accent)
+            case .verified: Text("Controller confirmed the new value.").foregroundStyle(FLTheme.ok)
             case .mismatch(let got): Text("Controller still reports \(def.format(def.displayValue(from: got))). It may have rejected the value.").foregroundStyle(FLTheme.danger)
             case .timedOut: Text("No confirmation within 5 s. Check the value after reconnecting.").foregroundStyle(FLTheme.warn)
             case .failed(let m): Text(m).foregroundStyle(FLTheme.danger)

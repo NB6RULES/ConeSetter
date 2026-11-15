@@ -123,6 +123,14 @@ def row(*widgets, spacing=6) -> QtWidgets.QHBoxLayout:
     return h
 
 
+class _stretch(QtWidgets.QHBoxLayout):
+    """A layout holding one widget that takes all spare width."""
+    def __init__(self, w):
+        super().__init__()
+        self.setContentsMargins(0, 0, 0, 0)
+        self.addWidget(w, 1)
+
+
 class Tile(QtWidgets.QFrame):
     def __init__(self, title: str):
         super().__init__()
@@ -383,11 +391,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.x_box.addItems(["Time", "Distance"])
         self.x_box.currentIndexChanged.connect(lambda _: self._draw_traces())
         self.heading = label("OBRA Run Analyzer", "value")
+        self.heading.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        self.heading.setMinimumWidth(120)
         self.update_btn = QtWidgets.QPushButton(f"v{updater.current_label()}")
         self.update_btn.setToolTip("Check for updates")
         self.update_btn.setFlat(True)
         self.update_btn.clicked.connect(lambda: self.check_updates(manual=True))
-        outer.addLayout(row(self.open_btn, self.heading, None, self.update_btn,
+        outer.addLayout(row(self.open_btn, _stretch(self.heading), self.update_btn,
                             label("Map", "muted"), self.map_box,
                             label("Colour track by", "muted"), self.color_box,
                             label("Graphs against", "muted"), self.x_box,
@@ -477,6 +487,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.scale.setParentItem(self.map.getPlotItem().vb)
         self.scale.anchor((1, 1), (1, 1), offset=(-20, -16))
         self.legend = label("", "muted")
+        self.legend.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        self.legend.setMinimumWidth(80)
         self.credit = label("", "muted")
         self.credit.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.map.scene().sigMouseClicked.connect(self._map_clicked)
@@ -485,7 +497,11 @@ class MainWindow(QtWidgets.QMainWindow):
         ml.setContentsMargins(0, 0, 0, 0)
         ml.setSpacing(4)
         ml.addWidget(self.map, 1)
-        ml.addLayout(row(self.legend, None, self.credit))
+        foot = QtWidgets.QHBoxLayout()
+        foot.setContentsMargins(0, 0, 0, 0)
+        foot.addWidget(self.legend, 1)
+        foot.addWidget(self.credit, 0)
+        ml.addLayout(foot)
         split.addWidget(mp)
 
         self.tabs = QtWidgets.QTabWidget()

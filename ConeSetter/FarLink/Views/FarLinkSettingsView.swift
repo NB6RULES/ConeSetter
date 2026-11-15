@@ -47,6 +47,7 @@ struct FarLinkSettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
+            .themedList()
             .navigationTitle("FarLink settings")
             .navigationBarTitleDisplayMode(.inline)
         }
