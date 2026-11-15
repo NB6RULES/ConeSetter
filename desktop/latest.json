@@ -1,8 +1,8 @@
 {
   "version": "1.1.0",
-  "build": 5,
+  "build": 6,
   "url": "https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe",
-  "notes": "Analyzer 1.1: satellite imagery under the track, with a Map switch and offline cache",
+  "notes": "FarLink tab restyled to match the rest of the app; analyzer tidy-ups for small windows",
   "date": "2026-11-15",
-  "size": 73750630
+  "size": 73752143
 }
