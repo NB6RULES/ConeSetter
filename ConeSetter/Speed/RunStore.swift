@@ -12,8 +12,14 @@ struct RunSummary: Codable, Identifiable, Hashable {
     var avgSpeed: Double
     var fused: Bool
     var sampleCount: Int
+    var driver: String?
+    var runType: String?
+    var notes: String?
 
     init(run: SpeedRun) {
+        driver = run.driverText.isEmpty ? nil : run.driverText
+        runType = run.runTypeText.isEmpty ? nil : run.runTypeText
+        notes = run.notesText.isEmpty ? nil : run.notesText
         let s = RunAnalysis.stats(run)
         id = run.id
         name = run.name
@@ -68,9 +74,22 @@ final class RunStore: ObservableObject {
         save(run)
     }
 
+    /// Saves the name, driver, run type and notes of a run.
+    func updateDetails(_ id: UUID, _ details: RunDetails) async {
+        guard var run = await load(id) else { return }
+        details.apply(to: &run)
+        save(run)
+    }
+
     func delete(_ id: UUID) {
-        try? FileManager.default.removeItem(at: runURL(id))
-        try? FileManager.default.removeItem(at: summaryURL(id))
+        delete([id])
+    }
+
+    func delete(_ ids: [UUID]) {
+        for id in ids {
+            try? FileManager.default.removeItem(at: runURL(id))
+            try? FileManager.default.removeItem(at: summaryURL(id))
+        }
         reload()
     }
 

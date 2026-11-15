@@ -34,7 +34,14 @@ enum RunExcelExporter {
         sum.set(2, [.t("Recorded", .bold), .number(excelDate(run.startDate), .dateTime)])
         sum.set(3, [.t("Data source", .bold), .t(stats.fusedFraction > 0.5 ? "GPS + IMU fusion (10 Hz)" : "GPS only")])
 
-        var r = 5
+        var r = 4
+        if !run.driverText.isEmpty { sum.set(r, [.t("Driver", .bold), .t(run.driverText)]); r += 1 }
+        if !run.runTypeText.isEmpty { sum.set(r, [.t("Run type", .bold), .t(run.runTypeText)]); r += 1 }
+        if !run.notesText.isEmpty {
+            let flat = run.notesText.split(whereSeparator: \.isNewline).joined(separator: "; ")
+            sum.set(r, [.t("Notes", .bold), .t(flat)]); r += 1
+        }
+        r += 1
         sum.set(r, [.t("Statistic", .header), .t("Value", .header), .t("Unit", .header)]); r += 1
         func stat(_ label: String, _ v: Double?, _ unitLabel: String, _ st: XLSXWorkbook.Style = .dp2) {
             let value: XLSXWorkbook.Cell
@@ -296,7 +303,16 @@ enum RunExcelExporter {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         var x = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gpx version=\"1.1\" creator=\"Cone Setter\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n"
-        x += "<trk><name>\(run.name.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;"))</name><trkseg>\n"
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+        }
+        var desc: [String] = []
+        if !run.driverText.isEmpty { desc.append("Driver: \(run.driverText)") }
+        if !run.runTypeText.isEmpty { desc.append("Type: \(run.runTypeText)") }
+        if !run.notesText.isEmpty { desc.append(run.notesText) }
+        x += "<trk><name>\(esc(run.name))</name>"
+        if !desc.isEmpty { x += "<desc>\(esc(desc.joined(separator: " | ")))</desc>" }
+        x += "<trkseg>\n"
         for p in run.samples {
             x += String(format: "<trkpt lat=\"%.8f\" lon=\"%.8f\"><ele>%.1f</ele>", p.lat, p.lon, p.alt)
             x += "<time>\(iso.string(from: run.startDate.addingTimeInterval(p.t)))</time>"

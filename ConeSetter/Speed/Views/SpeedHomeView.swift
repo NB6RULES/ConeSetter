@@ -9,6 +9,17 @@ struct SpeedHomeView: View {
     @State private var confirmStop = false
     @State private var recovered = false
     @State private var deleteTarget: RunSummary?
+    @State private var editTarget: RunSummary?
+    @State private var selecting = false
+    @State private var selected: Set<UUID> = []
+    @State private var bulkStatus: String?
+    @State private var share: ShareItem?
+    @State private var exportError: String?
+    @State private var confirmBulkDelete = false
+    @AppStorage("skipStops") private var skipStops = false
+    @AppStorage("skipBelowMS") private var skipBelowMS = 1.0
+    @AppStorage("skipMinDuration") private var skipMinDuration = 3.0
+    @AppStorage("skipPadding") private var skipPadding = 1.0
 
     private var unit: SpeedUnit { SpeedUnit(rawValue: unitRaw) ?? .kmh }
 
@@ -42,7 +53,22 @@ struct SpeedHomeView: View {
                             .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
                     }
 
-                    SectionTitle(text: "Runs", systemImage: "flag.checkered")
+                    HStack {
+                        SectionTitle(text: "Runs", systemImage: "flag.checkered")
+                        Spacer()
+                        if selecting {
+                            Button(allSelected ? "Deselect all" : "Select all") {
+                                selected = allSelected ? [] : Set(store.summaries.map(\.id))
+                            }
+                            .font(.subheadline)
+                            Button("Done") { endSelecting() }
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.leading, 10)
+                        } else if !store.summaries.isEmpty {
+                            Button("Select") { withAnimation { selecting = true } }
+                                .font(.subheadline.weight(.semibold))
+                        }
+                    }
                     if store.summaries.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "road.lanes.curved.right")
@@ -60,18 +86,34 @@ struct SpeedHomeView: View {
                     } else {
                         VStack(spacing: 10) {
                             ForEach(store.summaries) { s in
-                                NavigationLink(value: s) { runRow(s) }
-                                    .buttonStyle(.plain)
-                                    .contextMenu {
-                                        Button(role: .destructive) { deleteTarget = s } label: {
-                                            Label("Delete run", systemImage: "trash")
+                                if selecting {
+                                    Button { toggle(s.id) } label: { runRow(s, picked: selected.contains(s.id)) }
+                                        .buttonStyle(.plain)
+                                } else {
+                                    NavigationLink(value: s) { runRow(s, picked: nil) }
+                                        .buttonStyle(.plain)
+                                        .contextMenu {
+                                            Button { editTarget = s } label: {
+                                                Label("Driver, type and notes", systemImage: "square.and.pencil")
+                                            }
+                                            Button {
+                                                selected = [s.id]
+                                                withAnimation { selecting = true }
+                                            } label: {
+                                                Label("Select runs", systemImage: "checkmark.circle")
+                                            }
+                                            Button(role: .destructive) { deleteTarget = s } label: {
+                                                Label("Delete run", systemImage: "trash")
+                                            }
                                         }
-                                    }
+                                }
                             }
                         }
-                        Text(recovered
-                             ? "A run interrupted by the app closing was recovered. Touch and hold a run to delete it."
-                             : "Touch and hold a run to delete it.")
+                        Text(selecting
+                             ? "Tap runs to pick them, then save them together as one zip."
+                             : recovered
+                             ? "A run interrupted by the app closing was recovered. Touch and hold a run to add notes, select or delete."
+                             : "Touch and hold a run to add notes, select or delete. Select saves several runs as one zip.")
                             .font(.caption2).foregroundStyle(.tertiary)
                     }
 
@@ -86,6 +128,40 @@ struct SpeedHomeView: View {
                 .padding(16)
             }
             .background(Theme.background.ignoresSafeArea())
+            .safeAreaInset(edge: .bottom) {
+                if selecting { selectionBar }
+            }
+            .overlay {
+                if let msg = bulkStatus {
+                    VStack(spacing: 10) {
+                        ProgressView()
+                        Text(msg).font(.subheadline)
+                    }
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                }
+            }
+            .sheet(item: $share) { ActivityView(items: [$0.url]) }
+            .sheet(item: $editTarget) { s in
+                RunDetailsSheet(details: RunDetails(name: s.name, driver: s.driver ?? "", runType: s.runType ?? "", notes: s.notes ?? "")) { d in
+                    Task { await store.updateDetails(s.id, d) }
+                }
+            }
+            .alert("Export failed", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(exportError ?? "")
+            }
+            .confirmationDialog("Delete \(selected.count) run\(selected.count == 1 ? "" : "s")?", isPresented: $confirmBulkDelete, titleVisibility: .visible) {
+                Button("Delete", role: .destructive) {
+                    store.delete(Array(selected))
+                    endSelecting()
+                }
+            }
+            .onChange(of: store.summaries) { _, list in
+                selected.formIntersection(list.map(\.id))
+                if list.isEmpty { selecting = false }
+            }
             .navigationTitle("Speed")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -122,6 +198,70 @@ struct SpeedHomeView: View {
                 if !rec.isRecording, store.recoverCheckpoint() { recovered = true }
             }
             .onDisappear { rec.endPreview() }
+        }
+    }
+
+    // MARK: Selection
+
+    private var allSelected: Bool { !store.summaries.isEmpty && selected.count == store.summaries.count }
+
+    private func toggle(_ id: UUID) {
+        if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
+    }
+
+    private func endSelecting() {
+        withAnimation { selecting = false }
+        selected = []
+    }
+
+    private var selectionBar: some View {
+        HStack(spacing: 10) {
+            Menu {
+                Button { exportZip([.xlsx]) } label: { Label("Excel workbooks", systemImage: "tablecells") }
+                Button { exportZip([.csv]) } label: { Label("CSV files", systemImage: "doc.plaintext") }
+                Button { exportZip([.gpx]) } label: { Label("GPX tracks", systemImage: "map") }
+                Button { exportZip(RunExportFormat.allCases) } label: { Label("All three formats", systemImage: "square.stack.3d.up") }
+            } label: {
+                Label(selected.isEmpty ? "Save as zip" : "Save \(selected.count) as zip", systemImage: "doc.zipper")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Theme.accentGradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            }
+
+            Button { confirmBulkDelete = true } label: {
+                Image(systemName: "trash")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(width: 60)
+                    .padding(.vertical, 14)
+                    .background(Color.red.opacity(0.85), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .disabled(selected.isEmpty || bulkStatus != nil)
+        .opacity(selected.isEmpty ? 0.5 : 1)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
+    }
+
+    private func exportZip(_ formats: [RunExportFormat]) {
+        // Oldest first, so the files and the index read in the order the runs were driven.
+        let ids = store.summaries.filter { selected.contains($0.id) }.sorted { $0.startDate < $1.startDate }.map(\.id)
+        guard !ids.isEmpty else { return }
+        let unit = self.unit
+        let skip = IdleSkip(enabled: skipStops, speedBelow: skipBelowMS, minDuration: skipMinDuration, padding: skipPadding)
+        Task {
+            bulkStatus = "Exporting…"
+            defer { bulkStatus = nil }
+            do {
+                let url = try await RunBulkExport.zip(ids: ids, formats: formats, unit: unit, skip: skip) { bulkStatus = $0 }
+                share = ShareItem(url: url)
+            } catch {
+                exportError = error.localizedDescription
+            }
         }
     }
 
@@ -230,8 +370,14 @@ struct SpeedHomeView: View {
 
     // MARK: Rows
 
-    private func runRow(_ s: RunSummary) -> some View {
+    /// `picked` is nil outside selection mode, otherwise whether the run is ticked.
+    private func runRow(_ s: RunSummary, picked: Bool?) -> some View {
         HStack(spacing: 12) {
+            if let picked {
+                Image(systemName: picked ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(picked ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(HierarchicalShapeStyle.tertiary))
+            }
             VStack(spacing: 0) {
                 Text(String(format: "%.0f", unit.convert(s.topSpeed)))
                     .font(.system(size: 22, weight: .heavy, design: .rounded))
@@ -246,9 +392,13 @@ struct SpeedHomeView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(s.name).font(.body.weight(.semibold)).lineLimit(1)
+                if s.driver != nil || s.runType != nil {
+                    RunTags(driver: s.driver, runType: s.runType)
+                }
                 Text(s.startDate.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption).foregroundStyle(.secondary)
                 HStack(spacing: 10) {
+                    if s.notes != nil { Image(systemName: "note.text") }
                     Label(RunAnalysis.formatDuration(s.duration), systemImage: "timer")
                     Label(s.distance >= 1000 ? String(format: "%.2f km", s.distance / 1000) : String(format: "%.0f m", s.distance),
                           systemImage: "ruler")
@@ -259,9 +409,13 @@ struct SpeedHomeView: View {
                 .lineLimit(1)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+            if picked == nil {
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+            }
         }
         .card(padding: 12)
+        .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+            .stroke(Theme.accent.opacity(picked == true ? 0.7 : 0), lineWidth: 1.5))
         .contentShape(Rectangle())
     }
 
