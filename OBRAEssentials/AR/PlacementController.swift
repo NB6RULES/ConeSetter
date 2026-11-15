@@ -384,7 +384,7 @@ final class PlacementController: NSObject, ObservableObject, ARSessionDelegate {
             lines.append(row)
         }
         let safe = layout.name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: " ", with: "_")
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ConeSetter_\(safe).csv")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Cones_\(safe).csv")
         do {
             try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
             return url

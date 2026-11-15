@@ -1,4 +1,4 @@
-# Cone Setter CSV — one cone per row: colour, x, y (metres; x = forward, y = left)
+# OBRA Essentials cone layout CSV — one cone per row: colour, x, y (metres; x = forward, y = left)
 # Colours: blue (left edge), yellow (right edge), orange, big_orange
 # Optional refA / refB rows are the two points you mark and tape on the ground.
 colour,x,y

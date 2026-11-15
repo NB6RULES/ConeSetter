@@ -1,5 +1,5 @@
 // FarLink protocol checks, compiled with the pure-Foundation protocol code on the macOS CI runner:
-//   swiftc ConeSetter/FarLink/Protocol/*.swift Tests/FarLinkHarness/main.swift -o farlink-harness
+//   swiftc OBRAEssentials/FarLink/Protocol/*.swift Tests/FarLinkHarness/main.swift -o farlink-harness
 // Ported from the XCTest suite in the standalone FarLink repo.
 
 import Foundation

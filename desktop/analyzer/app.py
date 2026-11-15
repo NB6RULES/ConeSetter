@@ -710,7 +710,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def open_dialog(self):
         last = self.settings.value("lastDir", "") if self.persist else ""
         paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
-            self, "Open runs", last, "Run exports (*.zip *.csv *.xlsx *.gpx);;All files (*)")
+            self, "Open runs", last, "Run exports (*.zip *.csv *.xlsx *.gpx *.json);;All files (*)")
         if paths:
             if self.persist:
                 self.settings.setValue("lastDir", os.path.dirname(paths[0]))

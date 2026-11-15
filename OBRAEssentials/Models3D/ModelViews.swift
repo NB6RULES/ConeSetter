@@ -12,9 +12,16 @@ final class AppRouter: ObservableObject {
     @Published var tab: Tab = .cones
     @Published var openItem: ModelItem?
     @Published var importError: String?
+    /// A run archive opened from Files or a share sheet, waiting for the GPS tab to import it.
+    @Published var runImportURL: URL?
 
     /// Called for files opened from the Files app or a share sheet.
     func open(url: URL) {
+        if url.pathExtension.lowercased() == "zip" {
+            tab = .speed
+            runImportURL = url
+            return
+        }
         do {
             let item = try ModelLibrary.shared.importFile(from: url)
             tab = .models

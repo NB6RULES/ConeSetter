@@ -6,21 +6,21 @@
 
 **The Oxford Brookes Racing Autonomous toolkit: lay out cones, log runs, view CAD, tune the motor controller, and analyse it all on a PC.**
 
-<a href="https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe"><img src="https://img.shields.io/badge/Download-Windows%20Run%20Analyzer%20(.exe)-0078D4?style=for-the-badge&logo=windows11&logoColor=white" alt="Download the Windows Run Analyzer" height="44"></a>
+<a href="https://github.com/NB6RULES/OBRA-Essentials/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe"><img src="https://img.shields.io/badge/Download-Windows%20Run%20Analyzer%20(.exe)-0078D4?style=for-the-badge&logo=windows11&logoColor=white" alt="Download the Windows Run Analyzer" height="44"></a>
 &nbsp;
-<a href="https://github.com/NB6RULES/ConeSetter/releases/latest/download/ConeSetter.ipa"><img src="https://img.shields.io/badge/Download-iPhone%20app%20(.ipa)-FF6B12?style=for-the-badge&logo=apple&logoColor=white" alt="Download the iPhone app" height="44"></a>
+<a href="https://github.com/NB6RULES/OBRA-Essentials/releases/latest/download/OBRA-Essentials.ipa"><img src="https://img.shields.io/badge/Download-iPhone%20app%20(.ipa)-FF6B12?style=for-the-badge&logo=apple&logoColor=white" alt="Download the iPhone app" height="44"></a>
 
-<a href="https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json"><img src="https://img.shields.io/badge/SideStore-source%20link-8A2BE2?style=for-the-badge&logo=rss&logoColor=white" alt="SideStore source" height="32"></a>
+<a href="https://raw.githubusercontent.com/NB6RULES/OBRA-Essentials/main/source.json"><img src="https://img.shields.io/badge/SideStore-source%20link-8A2BE2?style=for-the-badge&logo=rss&logoColor=white" alt="SideStore source" height="32"></a>
 &nbsp;
-<a href="https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/demo-runs.zip"><img src="https://img.shields.io/badge/Try%20it-demo%20runs%20(.zip)-35D07F?style=for-the-badge&logo=files&logoColor=white" alt="Demo runs" height="32"></a>
+<a href="https://github.com/NB6RULES/OBRA-Essentials/releases/download/analyzer-latest/demo-runs.zip"><img src="https://img.shields.io/badge/Try%20it-demo%20runs%20(.zip)-35D07F?style=for-the-badge&logo=files&logoColor=white" alt="Demo runs" height="32"></a>
 
 <br>
 
-![iPhone app version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FConeSetter%2Fmain%2Fsource.json&query=%24.apps%5B0%5D.version&label=iPhone%20app&color=FF6B12&style=flat-square&logo=apple)
-![Windows analyzer version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FConeSetter%2Fmain%2Fdesktop%2Flatest.json&query=%24.version&label=Windows%20analyzer&color=0078D4&style=flat-square)
-![Windows analyzer build](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FConeSetter%2Fmain%2Fdesktop%2Flatest.json&query=%24.build&label=build&color=0078D4&style=flat-square)
-[![Build IPA](https://github.com/NB6RULES/ConeSetter/actions/workflows/build.yml/badge.svg)](https://github.com/NB6RULES/ConeSetter/actions/workflows/build.yml)
-[![Build Windows analyzer](https://github.com/NB6RULES/ConeSetter/actions/workflows/desktop.yml/badge.svg)](https://github.com/NB6RULES/ConeSetter/actions/workflows/desktop.yml)
+![iPhone app version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FOBRA-Essentials%2Fmain%2Fsource.json&query=%24.apps%5B0%5D.version&label=iPhone%20app&color=FF6B12&style=flat-square&logo=apple)
+![Windows analyzer version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FOBRA-Essentials%2Fmain%2Fdesktop%2Flatest.json&query=%24.version&label=Windows%20analyzer&color=0078D4&style=flat-square)
+![Windows analyzer build](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FOBRA-Essentials%2Fmain%2Fdesktop%2Flatest.json&query=%24.build&label=build&color=0078D4&style=flat-square)
+[![Build IPA](https://github.com/NB6RULES/OBRA-Essentials/actions/workflows/build.yml/badge.svg)](https://github.com/NB6RULES/OBRA-Essentials/actions/workflows/build.yml)
+[![Build Windows analyzer](https://github.com/NB6RULES/OBRA-Essentials/actions/workflows/desktop.yml/badge.svg)](https://github.com/NB6RULES/OBRA-Essentials/actions/workflows/desktop.yml)
 ![iOS 18+](https://img.shields.io/badge/iOS-18%2B-111111?style=flat-square&logo=ios)
 ![Windows 10 / 11](https://img.shields.io/badge/Windows-10%20%2F%2011-111111?style=flat-square&logo=windows)
 
@@ -60,14 +60,16 @@ The analyzer checks for a newer build every time it starts and offers to update 
 
 ## 📱 Get the iPhone app
 
-Formerly called Cone Setter. It keeps the bundle ID `com.nb6rules.conesetter` and this repository name, so SideStore updates an existing install in place and saved sessions and runs stay. Built for the iPhone 17 Pro Max; works on any LiDAR iPhone on iOS 18 or later.
+Built for the iPhone 17 Pro Max; works on any LiDAR iPhone on iOS 18 or later.
+
+> **Coming from Cone Setter?** OBRA Essentials 3.0 has its own bundle ID (`com.nb6rules.obraessentials`), so it installs as a new app next to the old one. In the old app, open the speed tab, tap **Select**, tick your runs and **Save as zip** (CSV or all formats). In OBRA Essentials, open **GPS → gear → Import runs** and pick that zip. Keep the old app until you have checked the import; cone sessions and 3D files are not carried across.
 
 ### Install with SideStore
 
 Add this source in SideStore (**Sources → +**):
 
 ```
-https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json
+https://raw.githubusercontent.com/NB6RULES/OBRA-Essentials/main/source.json
 ```
 
 Every push to `main` builds a new unsigned IPA on GitHub Actions, publishes it as a release and updates `source.json`, so SideStore shows the update.
@@ -94,6 +96,7 @@ Records the car's speed with timestamps and coordinates, and keeps running with 
 - **Excel export (.xlsx):** a Summary sheet with stats plus track and graph images, a Charts sheet with native editable charts (speed, acceleration, speed vs distance, elevation, and the track map coloured by speed band), every sample on the Data sheet, raw GPS fixes, and the series behind the charts. CSV and GPX exports are also available.
 - **Driver, run type and notes:** tap the card under the top speed on a run (or touch and hold a run in the list) to set its name, driver, run type (Acceleration, Skidpad, Autocross… or your own) and free notes. They show in the run list and go into the Excel Summary sheet, the GPX description and the file name.
 - **Save several runs as one zip:** tap **Select** above the run list, tick the runs, then **Save as zip** and choose Excel, CSV, GPX or all three. The zip also holds `Runs.csv`, one row per run with its driver, type, notes and headline numbers.
+- **Import runs:** the gear menu's **Import runs (.zip)** reads a zip saved from the app (or a single run CSV / backup JSON), restoring names, drivers, types and notes and skipping runs already on the phone. Opening a zip from Files with *Open in OBRA Essentials* does the same. A zip needs CSV or **Full backup** inside; the backup keeps the raw GPS fixes and barometer data too, CSV keeps the processed samples.
 - Runs autosave every 30 s. A run cut off by the app closing is recovered the next time the Speed tab opens.
 
 CI runs `Tests/Harness/main.swift`, which simulates laps with noisy GPS, IMU and barometer and an arbitrary phone mount, before every build. Its outputs, including a sample Excel export, are attached to the `ci-test` pre-release.
@@ -106,7 +109,7 @@ The protocol code is checked in CI by `Tests/FarLinkHarness/main.swift`. It is b
 
 ## 🟣 3D tab (CAD and 3D file viewer)
 
-Opens 3D files offline, from the in-app picker or by sharing a file to Cone Setter from the Files app.
+Opens 3D files offline, from the in-app picker or by sharing a file to OBRA Essentials from the Files app.
 
 - **CAD:** STEP, IGES, BREP, FreeCAD (.fcstd), Rhino (.3dm), read with the OpenCascade kernel compiled to WebAssembly.
 - **Drawings:** ASCII DXF (lines, polylines with bulges, arcs, circles, ellipses, splines, blocks, 3D faces and polyface meshes). Text and hatches aren't drawn.
@@ -148,7 +151,7 @@ The Xcode project is generated with [XcodeGen](https://github.com/yonaskolb/Xcod
 ```
 brew install xcodegen
 xcodegen generate
-open ConeSetter.xcodeproj
+open OBRAEssentials.xcodeproj
 ```
 
 CI: `.github/workflows/build.yml` (macOS runner, unsigned build, release + `source.json` update via `scripts/update_source.py`).

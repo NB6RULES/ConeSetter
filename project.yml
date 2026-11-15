@@ -1,4 +1,4 @@
-name: ConeSetter
+name: OBRAEssentials
 options:
   bundleIdPrefix: com.nb6rules
   deploymentTarget:
@@ -6,7 +6,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "2.1.0"
+    MARKETING_VERSION: "3.0.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
@@ -14,14 +14,14 @@ settings:
     DEVELOPMENT_TEAM: ""
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 targets:
-  ConeSetter:
+  OBRAEssentials:
     type: application
     platform: iOS
     sources:
-      - path: ConeSetter
+      - path: OBRAEssentials
         excludes:
           - "Resources/Viewer/**"
-      - path: ConeSetter/Resources/Viewer
+      - path: OBRAEssentials/Resources/Viewer
         type: folder
         buildPhase: resources
     info:
@@ -43,21 +43,26 @@ targets:
         NSBluetoothAlwaysUsageDescription: OBRA Essentials uses Bluetooth in the FarLink tab to read and configure a FarDriver motor controller.
         UIBackgroundModes: [location, bluetooth-central]
         CFBundleDocumentTypes:
+          - CFBundleTypeName: Run archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.zip-archive
           - CFBundleTypeName: 3D model or CAD file
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
             LSItemContentTypes:
-              - com.nb6rules.conesetter.cad
+              - com.nb6rules.obraessentials.cad
               - public.3d-content
         UTImportedTypeDeclarations:
-          - UTTypeIdentifier: com.nb6rules.conesetter.cad
+          - UTTypeIdentifier: com.nb6rules.obraessentials.cad
             UTTypeDescription: 3D model or CAD file
             UTTypeConformsTo: [public.data]
             UTTypeTagSpecification:
               public.filename-extension: ["step", "stp", "iges", "igs", "brep", "brp", "fcstd", "3dm", "dxf", "stl", "obj", "ply", "off", "3mf", "amf", "gltf", "glb", "fbx", "dae", "3ds", "wrl", "bim", "sldprt", "sldasm", "slddrw", "catpart", "catproduct", "cgr", "f3d", "f3z", "ipt", "iam", "prt", "asm", "par", "psm", "x_t", "x_b", "sat", "sab", "dwg", "jt", "skp", "3dxml", "blend"]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.nb6rules.conesetter
-        PRODUCT_NAME: ConeSetter
+        PRODUCT_BUNDLE_IDENTIFIER: com.nb6rules.obraessentials
+        PRODUCT_NAME: OBRAEssentials
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO

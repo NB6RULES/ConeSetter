@@ -14,8 +14,8 @@ struct AppUpdate: Equatable {
 final class UpdateChecker: ObservableObject {
     static let shared = UpdateChecker()
 
-    static let sourceURL = "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json"
-    static let releasesURL = URL(string: "https://github.com/NB6RULES/ConeSetter/releases/latest")!
+    static let sourceURL = "https://raw.githubusercontent.com/NB6RULES/OBRA-Essentials/main/source.json"
+    static let releasesURL = URL(string: "https://github.com/NB6RULES/OBRA-Essentials/releases/latest")!
 
     @Published private(set) var available: AppUpdate?
     @Published private(set) var checking = false

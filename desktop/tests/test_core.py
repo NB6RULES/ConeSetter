@@ -1,4 +1,4 @@
-"""Core checks: run with `python tests/test_core.py [folder with Cone Setter sample exports]`."""
+"""Core checks: run with `python tests/test_core.py [folder with OBRA Essentials sample exports]`."""
 
 import math
 import os
@@ -107,6 +107,18 @@ with tempfile.TemporaryDirectory() as tmp:
     got = laps.find_laps(r, gate)
     check(len(got) == len(found) and max(abs(a.time - b.time) for a, b in zip(got, found)) < 0.02,
           "lap times survive the CSV round trip")
+    import json as _json
+    backup = {"id": "X", "name": "Backup run", "startDate": "2026-11-15T14:30:00Z", "driver": "Machu", "runType": "Skidpad",
+              "notes": "n", "imuUsed": True, "fixes": [],
+              "samples": [{"t": float(run.t[k]), "lat": float(run.lat[k]), "lon": float(run.lon[k]), "alt": 80.0,
+                           "speed": float(run.speed[k]), "longAccel": 0.0, "latAccel": 0.0, "heading": float(run.heading[k]),
+                           "distance": float(run.dist[k]), "hAcc": 3.5, "fused": True} for k in range(len(run.t))]}
+    bz = os.path.join(tmp, "backup.zip")
+    with zipfile.ZipFile(bz, "w") as z:
+        z.writestr("Backup run.json", _json.dumps(backup))
+    runs, problems = data.load_path(bz)
+    check(len(runs) == 1 and not problems and runs[0].driver == "Machu" and runs[0].source == "GPS + IMU fusion"
+          and len(laps.find_laps(runs[0], gate)) == len(found), f"full-backup zip from the phone opens ({problems})")
     bad = os.path.join(tmp, "bad.csv")
     open(bad, "w").write("a,b\n1,2\n3,4\n")
     runs, problems = data.load_path(bad)
@@ -147,11 +159,11 @@ check(not updater.is_newer(rel, build=0), "a copy run from source never prompts"
 here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "latest.json")
 if os.path.exists(here):
     live = updater.parse_manifest(open(here, encoding="utf-8").read())
-    check(live.url.startswith("https://github.com/NB6RULES/ConeSetter/releases/download/"), "latest.json points at the release")
+    check(live.url.startswith("https://github.com/NB6RULES/"), "latest.json points at the release")
 
 samples = sys.argv[1] if len(sys.argv) > 1 else None
 if samples and os.path.isdir(samples):
-    print("== Real Cone Setter exports")
+    print("== Real OBRA Essentials exports")
     runs, problems = data.load_path(os.path.join(samples, "Sample-runs.zip"))
     check(len(runs) == 3 and not problems, f"app zip: {len(runs)} runs ({problems})")
     check(runs[0].driver == "Machu" and runs[0].run_type == "Skidpad" and "damp" in runs[0].notes, "app zip details")

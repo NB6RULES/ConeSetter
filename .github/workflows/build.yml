@@ -43,20 +43,20 @@ jobs:
         run: |
           mkdir -p harness-out
           set -o pipefail
-          { xcrun swiftc -O -module-name Harness ConeSetter/Speed/Core/*.swift Tests/Harness/main.swift -o harness-bin 2>&1 \
+          { xcrun swiftc -O -module-name Harness OBRAEssentials/Speed/Core/*.swift Tests/Harness/main.swift -o harness-bin 2>&1 \
             && ./harness-bin harness-out 2>&1; } | tee harness-out/harness.log
 
       - name: Logic tests (FarLink protocol)
         run: |
           set -o pipefail
-          { xcrun swiftc -O -module-name FarLinkHarness ConeSetter/FarLink/Protocol/*.swift Tests/FarLinkHarness/main.swift -o farlink-harness-bin 2>&1 \
+          { xcrun swiftc -O -module-name FarLinkHarness OBRAEssentials/FarLink/Protocol/*.swift Tests/FarLinkHarness/main.swift -o farlink-harness-bin 2>&1 \
             && ./farlink-harness-bin 2>&1; } | tee harness-out/farlink-harness.log
 
       - name: Build (unsigned)
         run: |
           xcodebuild \
-            -project ConeSetter.xcodeproj \
-            -target ConeSetter \
+            -project OBRAEssentials.xcodeproj \
+            -target OBRAEssentials \
             -configuration Release \
             -sdk iphoneos \
             SYMROOT="$PWD/build" \
@@ -72,20 +72,20 @@ jobs:
               exit 1
             }
           grep -E "warning:" xcodebuild.log | sort -u | head -40 || true
-          test -d build/Release-iphoneos/ConeSetter.app
+          test -d build/Release-iphoneos/OBRAEssentials.app
 
       - name: Package IPA
         run: |
           rm -rf Payload && mkdir Payload
-          cp -R build/Release-iphoneos/ConeSetter.app Payload/
-          zip -qry ConeSetter.ipa Payload
-          VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Payload/ConeSetter.app/Info.plist)
+          cp -R build/Release-iphoneos/OBRAEssentials.app Payload/
+          zip -qry OBRA-Essentials.ipa Payload
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Payload/OBRAEssentials.app/Info.plist)
           BUILD=${{ github.run_number }}
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "BUILD=$BUILD" >> "$GITHUB_ENV"
           echo "TAG=v$VERSION-b$BUILD" >> "$GITHUB_ENV"
-          echo "SIZE=$(stat -f%z ConeSetter.ipa)" >> "$GITHUB_ENV"
-          ls -la ConeSetter.ipa
+          echo "SIZE=$(stat -f%z OBRA-Essentials.ipa)" >> "$GITHUB_ENV"
+          ls -la OBRA-Essentials.ipa
 
       - name: Publish CI outputs (ci-test pre-release)
         if: always()
@@ -109,7 +109,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           NOTES=$(git log -1 --pretty=%s)
-          gh release create "$TAG" ConeSetter.ipa \
+          gh release create "$TAG" OBRA-Essentials.ipa \
             --title "OBRA Essentials $VERSION (build $BUILD)" \
             --notes "$NOTES" \
             --target "$GITHUB_SHA"
@@ -122,7 +122,7 @@ jobs:
             --version "$VERSION" \
             --build "$BUILD" \
             --size "$SIZE" \
-            --url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/ConeSetter.ipa" \
+            --url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/OBRA-Essentials.ipa" \
             --notes "$NOTES"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -1,6 +1,6 @@
 import Foundation
 
-private let checkpointQueue = DispatchQueue(label: "conesetter.checkpoint", qos: .utility)
+private let checkpointQueue = DispatchQueue(label: "obraessentials.checkpoint", qos: .utility)
 
 struct RunSummary: Codable, Identifiable, Hashable {
     var id: UUID
@@ -72,6 +72,64 @@ final class RunStore: ObservableObject {
         guard var run = await load(id) else { return }
         run.name = name
         save(run)
+    }
+
+    struct ImportOutcome {
+        var imported = 0
+        var duplicates = 0
+        var problems: [String] = []
+
+        var message: String {
+            var parts: [String] = []
+            if imported > 0 { parts.append("Imported \(imported) run\(imported == 1 ? "" : "s").") }
+            if duplicates > 0 { parts.append("\(duplicates) already here, skipped.") }
+            if imported == 0 && duplicates == 0 && problems.isEmpty { parts.append("Nothing to import.") }
+            if !problems.isEmpty { parts.append(problems.prefix(6).joined(separator: "\n")) }
+            return parts.joined(separator: "\n")
+        }
+    }
+
+    /// Imports runs from a zip saved by "Save as zip", a run CSV or a backup JSON.
+    func importFile(at url: URL) async -> ImportOutcome {
+        let name = url.lastPathComponent
+        let parsed = await Task.detached(priority: .userInitiated) { () -> RunImport.Result in
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            var data: Data?
+            var coordError: NSError?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordError) { readable in
+                data = try? Data(contentsOf: readable)
+            }
+            guard let data else {
+                return RunImport.Result(runs: [], problems: ["\(name): \(coordError?.localizedDescription ?? "the file couldn't be read")"])
+            }
+            return RunImport.runs(fromFile: data, fileName: name)
+        }.value
+
+        var outcome = ImportOutcome(problems: parsed.problems)
+        var known = summaries
+        let enc = Self.encoder
+        for run in parsed.runs {
+            let summary = RunSummary(run: run)
+            let duplicate = known.contains {
+                $0.id == run.id || (abs($0.startDate.timeIntervalSince(run.startDate)) < 1.5 && $0.sampleCount == summary.sampleCount)
+            }
+            if duplicate { outcome.duplicates += 1; continue }
+            guard let runData = try? enc.encode(run), let sumData = try? enc.encode(summary) else {
+                outcome.problems.append("\(run.name): couldn't be saved")
+                continue
+            }
+            do {
+                try runData.write(to: runURL(run.id), options: .atomic)
+                try sumData.write(to: summaryURL(run.id), options: .atomic)
+                known.append(summary)
+                outcome.imported += 1
+            } catch {
+                outcome.problems.append("\(run.name): \(error.localizedDescription)")
+            }
+        }
+        reload()
+        return outcome
     }
 
     /// Saves the name, driver, run type and notes of a run.

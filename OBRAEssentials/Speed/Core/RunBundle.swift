@@ -31,6 +31,11 @@ struct RunDetails: Equatable {
 
 enum RunExportFormat: String, CaseIterable {
     case xlsx, csv, gpx
+    /// The run exactly as stored (raw GPS fixes and barometer included). Imports back losslessly.
+    case json
+
+    /// The formats meant for reading in other programs.
+    static let readable: [RunExportFormat] = [.xlsx, .csv, .gpx]
 }
 
 /// Packs the exports of several runs into one .zip, with a Runs.csv index of every run.

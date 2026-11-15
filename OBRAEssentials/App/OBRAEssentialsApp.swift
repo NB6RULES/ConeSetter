@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct ConeSetterApp: App {
+struct OBRAEssentialsApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var router = AppRouter.shared
 

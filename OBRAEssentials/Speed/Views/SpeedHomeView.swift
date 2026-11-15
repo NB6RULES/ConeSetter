@@ -4,6 +4,9 @@ import CoreLocation
 struct SpeedHomeView: View {
     @ObservedObject private var rec = SpeedRecorder.shared
     @ObservedObject private var store = RunStore.shared
+    @ObservedObject private var router = AppRouter.shared
+    @State private var showImport = false
+    @State private var importMessage: String?
     @AppStorage("speedUnit") private var unitRaw = SpeedUnit.kmh.rawValue
     @State private var path: [RunSummary] = []
     @State private var confirmStop = false
@@ -79,6 +82,11 @@ struct SpeedHomeView: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
+                            Button { showImport = true } label: {
+                                Label("Import runs from a zip", systemImage: "square.and.arrow.down")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .padding(.top, 4)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -113,7 +121,7 @@ struct SpeedHomeView: View {
                              ? "Tap runs to pick them, then save them together as one zip."
                              : recovered
                              ? "A run interrupted by the app closing was recovered. Touch and hold a run to add notes, select or delete."
-                             : "Touch and hold a run to add notes, select or delete. Select saves several runs as one zip.")
+                             : "Touch and hold a run to add notes, select or delete. Select saves several runs as one zip; the gear menu imports one.")
                             .font(.caption2).foregroundStyle(.tertiary)
                     }
 
@@ -142,6 +150,19 @@ struct SpeedHomeView: View {
                 }
             }
             .sheet(item: $share) { ActivityView(items: [$0.url]) }
+            .sheet(isPresented: $showImport) {
+                DocumentPicker { urls in
+                    showImport = false
+                    if let url = urls.first { importRuns(url) }
+                }
+                .ignoresSafeArea()
+            }
+            .alert("Import", isPresented: Binding(get: { importMessage != nil }, set: { if !$0 { importMessage = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(importMessage ?? "")
+            }
+            .onChange(of: router.runImportURL) { _, _ in takeRoutedImport() }
             .sheet(item: $editTarget) { s in
                 RunDetailsSheet(details: RunDetails(name: s.name, driver: s.driver ?? "", runType: s.runType ?? "", notes: s.notes ?? "")) { d in
                     Task { await store.updateDetails(s.id, d) }
@@ -171,6 +192,10 @@ struct SpeedHomeView: View {
                         }
                         Toggle("IMU fusion (10 Hz)", isOn: Binding(get: { rec.useIMU }, set: { rec.useIMU = $0 }))
                             .disabled(rec.isRecording || !rec.motionAvailable)
+                        Divider()
+                        Button { showImport = true } label: {
+                            Label("Import runs (.zip)…", systemImage: "square.and.arrow.down")
+                        }
                     } label: {
                         Image(systemName: "gearshape.fill")
                     }
@@ -196,9 +221,28 @@ struct SpeedHomeView: View {
             .onAppear {
                 rec.beginPreview()
                 if !rec.isRecording, store.recoverCheckpoint() { recovered = true }
+                takeRoutedImport()
             }
             .onDisappear { rec.endPreview() }
         }
+    }
+
+    // MARK: Import
+
+    private func importRuns(_ url: URL) {
+        Task {
+            bulkStatus = "Importing runs…"
+            let outcome = await store.importFile(at: url)
+            bulkStatus = nil
+            importMessage = outcome.message
+        }
+    }
+
+    /// Picks up a zip that was opened from Files or shared to the app.
+    private func takeRoutedImport() {
+        guard let url = router.runImportURL else { return }
+        router.runImportURL = nil
+        importRuns(url)
     }
 
     // MARK: Selection
@@ -220,7 +264,9 @@ struct SpeedHomeView: View {
                 Button { exportZip([.xlsx]) } label: { Label("Excel workbooks", systemImage: "tablecells") }
                 Button { exportZip([.csv]) } label: { Label("CSV files", systemImage: "doc.plaintext") }
                 Button { exportZip([.gpx]) } label: { Label("GPX tracks", systemImage: "map") }
-                Button { exportZip(RunExportFormat.allCases) } label: { Label("All three formats", systemImage: "square.stack.3d.up") }
+                Button { exportZip(RunExportFormat.readable) } label: { Label("All three formats", systemImage: "square.stack.3d.up") }
+                Divider()
+                Button { exportZip([.json]) } label: { Label("Full backup (imports back exactly)", systemImage: "externaldrive") }
             } label: {
                 Label(selected.isEmpty ? "Save as zip" : "Save \(selected.count) as zip", systemImage: "doc.zipper")
                     .font(.headline)

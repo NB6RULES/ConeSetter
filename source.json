@@ -1,109 +1,27 @@
 {
   "name": "OBRA Essentials",
-  "identifier": "com.nb6rules.conesetter.source",
-  "subtitle": "AR + LiDAR cone layouts for Formula Student test days",
-  "description": "Sideload source for Cone Setter, an iPhone app that uses ARKit and the LiDAR scanner to show where every cone of a Formula Student / FS-AI skidpad, acceleration or autocross layout goes.",
-  "sourceURL": "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json",
-  "iconURL": "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/docs/icon.png",
-  "website": "https://github.com/NB6RULES/ConeSetter",
+  "identifier": "com.nb6rules.obraessentials.source",
+  "subtitle": "Cones, GPS speed logger, 3D viewer and FarLink for Formula Student test days",
+  "description": "Sideload source for OBRA Essentials, the Oxford Brookes Racing Autonomous iPhone toolkit: AR + LiDAR cone layouts, a GPS speed logger, a 3D file viewer and FarLink for FarDriver motor controllers.",
+  "sourceURL": "https://raw.githubusercontent.com/NB6RULES/OBRA-Essentials/main/source.json",
+  "iconURL": "https://raw.githubusercontent.com/NB6RULES/OBRA-Essentials/main/docs/icon.png",
+  "website": "https://github.com/NB6RULES/OBRA-Essentials",
   "tintColor": "#FF6A12",
   "featuredApps": [
-    "com.nb6rules.conesetter"
+    "com.nb6rules.obraessentials"
   ],
   "apps": [
     {
       "name": "OBRA Essentials",
-      "bundleIdentifier": "com.nb6rules.conesetter",
+      "bundleIdentifier": "com.nb6rules.obraessentials",
       "developerName": "NB6RULES",
       "subtitle": "Cones, GPS speed logger, 3D viewer and FarLink",
-      "localizedDescription": "Oxford Brookes Racing Autonomous toolkit in one app (formerly Cone Setter).\n\n• Cones: lay out Formula Student / FS-AI test tracks with AR + LiDAR. Skidpad, acceleration and CSV layouts, chained placement, saved sessions\n• GPS: 10 Hz GPS + IMU speed logger with heatmap track, graphs, driver / run type / notes, Excel, CSV and GPX export, and several runs saved as one zip\n• 3D: offline viewer for STEP, IGES, STL, DXF, OBJ, 3MF, glTF, Blender and more\n• FarLink: dashboard, tuning and registers for FarDriver motor controllers over Bluetooth\n\nBuilt for the iPhone 17 Pro Max (works on any LiDAR iPhone running iOS 18+).",
-      "iconURL": "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/docs/icon.png",
+      "localizedDescription": "Oxford Brookes Racing Autonomous toolkit in one app.\n\n• Cones: lay out Formula Student / FS-AI test tracks with AR + LiDAR. Skidpad, acceleration and CSV layouts, chained placement, saved sessions\n• GPS: 10 Hz GPS + IMU speed logger with heatmap track, graphs, driver / run type / notes, Excel, CSV and GPX export, and several runs saved as one zip\n• 3D: offline viewer for STEP, IGES, STL, DXF, OBJ, 3MF, glTF, Blender and more\n• FarLink: dashboard, tuning and registers for FarDriver motor controllers over Bluetooth\n\nBuilt for the iPhone 17 Pro Max (works on any LiDAR iPhone running iOS 18+).",
+      "iconURL": "https://raw.githubusercontent.com/NB6RULES/OBRA-Essentials/main/docs/icon.png",
       "tintColor": "#FF6A12",
       "category": "utilities",
       "screenshots": [],
-      "versions": [
-        {
-          "version": "2.1.0",
-          "buildVersion": "14",
-          "date": "2026-11-15T19:55:03Z",
-          "localizedDescription": "FarLink tab restyled to match the rest of the app; analyzer tidy-ups for small windows",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v2.1.0-b14/ConeSetter.ipa",
-          "size": 6236976,
-          "minOSVersion": "18.0"
-        },
-        {
-          "version": "2.0.0",
-          "buildVersion": "12",
-          "date": "2026-11-15T19:32:51Z",
-          "localizedDescription": "OBRA Essentials 2.0: app renamed, FarLink built in as a fourth tab (Cones, GPS, 3D, FarLink)",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v2.0.0-b12/ConeSetter.ipa",
-          "size": 6222658,
-          "minOSVersion": "18.0"
-        },
-        {
-          "version": "1.5.0",
-          "buildVersion": "10",
-          "date": "2026-11-15T18:32:58Z",
-          "localizedDescription": "Speed 1.5: driver, run type and notes on runs; select several runs and save them as one zip",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.5.0-b10/ConeSetter.ipa",
-          "size": 5972646,
-          "minOSVersion": "18.0"
-        },
-        {
-          "version": "1.4.1",
-          "buildVersion": "9",
-          "date": "2026-11-10T15:34:33Z",
-          "localizedDescription": "3D tab: replace multi-select file importer with tap-to-open document picker",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.4.1-b9/ConeSetter.ipa",
-          "size": 5853195,
-          "minOSVersion": "18.0"
-        },
-        {
-          "version": "1.4.0",
-          "buildVersion": "8",
-          "date": "2026-11-10T12:26:21Z",
-          "localizedDescription": "3D viewer: open Blender .blend files (4.2-5.2 verified, zstd/gzip)",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.4.0-b8/ConeSetter.ipa",
-          "size": 5849955,
-          "minOSVersion": "18.0"
-        },
-        {
-          "version": "1.3.0",
-          "buildVersion": "7",
-          "date": "2026-11-10T12:12:09Z",
-          "localizedDescription": "3D tab: offline viewer for STEP, IGES, BREP, STL, DXF, OBJ, 3MF, glTF and more",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.3.0-b7/ConeSetter.ipa",
-          "size": 5832499,
-          "minOSVersion": "18.0"
-        },
-        {
-          "version": "1.2.0",
-          "buildVersion": "6",
-          "date": "2026-11-09T23:13:13Z",
-          "localizedDescription": "Fix resume, anchors, tilt detection and checkpoint race; update checker; new dark UI with gauge, g-meter and track cards",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.2.0-b6/ConeSetter.ipa",
-          "size": 1031769,
-          "minOSVersion": "18.0"
-        },
-        {
-          "version": "1.1.0",
-          "buildVersion": "5",
-          "date": "2026-11-09T02:26:39Z",
-          "localizedDescription": "Speed tab: GPS+IMU speed logger, heatmap path, graphs, elevation, skip stops, Excel export",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.1.0-b5/ConeSetter.ipa",
-          "size": 867161,
-          "minOSVersion": "18.0"
-        },
-        {
-          "version": "1.0.0",
-          "buildVersion": "1",
-          "date": "2026-11-08T18:59:03Z",
-          "localizedDescription": "Cone Setter: AR + LiDAR cone placement for FS test tracks",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v1.0.0-b1/ConeSetter.ipa",
-          "size": 522371,
-          "minOSVersion": "18.0"
-        }
-      ],
+      "versions": [],
       "appPermissions": {
         "entitlements": [],
         "privacy": {
@@ -112,12 +30,7 @@
           "NSMotionUsageDescription": "OBRA Essentials uses the motion sensors and barometer for 10 Hz speed, g-force and elevation logging.",
           "NSBluetoothAlwaysUsageDescription": "OBRA Essentials uses Bluetooth in the FarLink tab to read and configure a FarDriver motor controller."
         }
-      },
-      "version": "2.1.0",
-      "versionDate": "2026-11-15T19:55:03Z",
-      "versionDescription": "FarLink tab restyled to match the rest of the app; analyzer tidy-ups for small windows",
-      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v2.1.0-b14/ConeSetter.ipa",
-      "size": 6236976
+      }
     }
   ],
   "news": []

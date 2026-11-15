@@ -1,5 +1,5 @@
 // Logic tests for the speed logger, compiled with the pure-Foundation core on the macOS CI runner:
-//   swiftc -O ConeSetter/Speed/Core/*.swift Tests/Harness/main.swift -o harness && ./harness out
+//   swiftc -O OBRAEssentials/Speed/Core/*.swift Tests/Harness/main.swift -o harness && ./harness out
 // Simulates a car lapping an oval with the phone mounted at an arbitrary angle, feeds noisy
 // 1 Hz GPS (with latency) and 100 Hz IMU into FusionEngine, checks the results and writes a
 // sample .xlsx export.
@@ -423,6 +423,45 @@ do {
     let zip = RunBundle.zip(files)
     check(zip.count > 20_000 && zip.prefix(2) == Data([0x50, 0x4B]), "zip of 3 runs built (\(zip.count) bytes, \(files.count) files)")
     try zip.write(to: outDir.appendingPathComponent("Sample-runs.zip"))
+
+    // Import: read the same zip back.
+    let reader = try ZipReader(zip)
+    check(reader.entries.count == files.count, "zip reader lists every file (\(reader.entries.count))")
+    let firstCSV = reader.entries.first { $0.name.hasSuffix(".csv") && $0.name != "Runs.csv" }!
+    check(try reader.read(firstCSV) == files.first { $0.name == firstCSV.name }!.data, "deflated file reads back byte for byte")
+    let imported = try RunImport.runs(fromZip: zip)
+    check(imported.runs.count == 3 && imported.problems.isEmpty, "3 runs imported from the zip (\(imported.problems))")
+    if imported.runs.count == 3 {
+        let ia = imported.runs[0]
+        check(ia.name == a.name && ia.driver == "Machu" && ia.runType == "Skidpad" && ia.notes == a.notes,
+              "name, driver, type and multi-line notes restored from Runs.csv")
+        check(imported.runs[2].name == "Plain/run: 3" && imported.runs[2].driver == nil, "run without details restored")
+        check(ia.samples.count == a.samples.count, "all \(a.samples.count) samples restored")
+        var worst = 0.0
+        for (p, q) in Swift.zip(ia.samples, a.samples) {
+            worst = max(worst, abs(p.speed - q.speed), abs(p.t - q.t), abs(p.longAccel - q.longAccel),
+                        abs(p.distance - q.distance) / 10, abs(p.lat - q.lat) * 1e5, abs(p.lon - q.lon) * 1e5)
+        }
+        check(worst < 0.006, String(format: "imported samples match the originals (worst difference %.4f)", worst))
+        check(abs(ia.startDate.timeIntervalSince(a.startDate)) < 0.01, "start time restored")
+        let sa = RunAnalysis.stats(a), si = RunAnalysis.stats(ia)
+        check(abs(sa.topSpeed - si.topSpeed) < 0.005 && abs(sa.distance - si.distance) < 0.1, "stats of the imported run match")
+    }
+    // Full backup: lossless.
+    let backup = RunBundle.zip([.init(name: "Runs.csv", data: Data(RunBundle.indexCSV(runs: [a], files: ["A"], unit: .kmh).utf8)),
+                                .init(name: "A.json", data: try enc.encode(a))])
+    let restored = try RunImport.runs(fromZip: backup)
+    check(restored.runs.count == 1 && restored.runs[0].id == a.id && restored.runs[0].samples == a.samples
+          && restored.runs[0].fixes == a.fixes && restored.runs[0].driver == a.driver, "full backup restores the run exactly")
+    // Things that must be refused cleanly.
+    let excelOnly = try RunImport.runs(fromZip: RunBundle.zip([.init(name: "X.xlsx", data: Data([1, 2, 3]))]))
+    check(excelOnly.runs.isEmpty && excelOnly.problems.count == 1, "Excel-only zip explains what to export instead")
+    check(RunImport.runs(fromFile: Data("hello".utf8), fileName: "notes.zip").problems.count == 1, "a file that isn't a zip is refused")
+    check(RunImport.runs(fromFile: Data("a,b\n1,2\n3,4\n".utf8), fileName: "other.csv").problems.count == 1, "an unrelated CSV is refused")
+    var damaged = zip
+    damaged[firstCSV.localOffset + 30 + firstCSV.name.utf8.count + firstCSV.compressedSize / 2] ^= 0xFF
+    let broken = (try? RunImport.runs(fromZip: damaged)) ?? RunImport.Result(runs: [], problems: ["unreadable"])
+    check(broken.runs.count == 2 && broken.problems.count == 1, "a damaged file in the zip is reported and the other runs still import")
     try RunExcelExporter.workbook(run: a, unit: .kmh, images: images).write(to: outDir.appendingPathComponent("Sample-export-details.xlsx"))
 } catch {
     check(false, "run details and zip: \(error)")

@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from . import __version__
 from ._build import BUILD
 
-MANIFEST_URL = "https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/desktop/latest.json"
-DOWNLOAD_PAGE = "https://github.com/NB6RULES/ConeSetter/releases/tag/analyzer-latest"
+MANIFEST_URL = "https://raw.githubusercontent.com/NB6RULES/OBRA-Essentials/main/desktop/latest.json"
+DOWNLOAD_PAGE = "https://github.com/NB6RULES/OBRA-Essentials/releases/tag/analyzer-latest"
 USER_AGENT = f"OBRA-Run-Analyzer/{__version__}"
 
 

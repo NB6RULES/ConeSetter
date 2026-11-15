@@ -93,7 +93,7 @@ struct ConeLayout: Identifiable, Codable, Hashable {
     }
 
     func csv() -> String {
-        var lines = ["# Cone Setter layout: \(name)", "# x = forward (m), y = left (m)", "colour,x,y"]
+        var lines = ["# OBRA Essentials cone layout: \(name)", "# x = forward (m), y = left (m)", "colour,x,y"]
         lines.append(String(format: "refA,%.3f,%.3f", refA.x, refA.y))
         lines.append(String(format: "refB,%.3f,%.3f", refB.x, refB.y))
         for c in cones {

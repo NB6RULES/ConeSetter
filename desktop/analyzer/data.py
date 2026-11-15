@@ -1,4 +1,4 @@
-"""Run model and loaders for the files Cone Setter exports (.zip, .csv, .xlsx, .gpx)."""
+"""Run model and loaders for the files OBRA Essentials exports (.zip, .csv, .xlsx, .gpx)."""
 
 from __future__ import annotations
 
@@ -164,7 +164,7 @@ def load_csv_text(text: str, name: str) -> Run:
 
     t, lat, lon = col("elapsed_s"), col("lat", "latitude"), col("lon", "longitude", "lng")
     if t is None or lat is None or lon is None:
-        raise LoadError(f"{name}: this isn't a Cone Setter run CSV (needs elapsed_s, lat and lon columns)")
+        raise LoadError(f"{name}: this isn't an OBRA Essentials run CSV (needs elapsed_s, lat and lon columns)")
     speed = col("speed_ms")
     if speed is None:
         for unit, f in (("speed_kmh", 3.6), ("speed_mph", 2.2369362921)):
@@ -205,7 +205,7 @@ def load_xlsx_bytes(data: bytes, name: str) -> Run:
     except Exception as e:  # noqa: BLE001
         raise LoadError(f"{name}: can't read this workbook ({e})") from e
     if "Data" not in wb.sheetnames:
-        raise LoadError(f"{name}: no Data sheet, so this isn't a Cone Setter export")
+        raise LoadError(f"{name}: no Data sheet, so this isn't an OBRA Essentials export")
     rows = list(wb["Data"].iter_rows(values_only=True))
     if len(rows) < 3:
         raise LoadError(f"{name}: no samples")
@@ -302,6 +302,31 @@ def load_gpx_text(text: str, name: str) -> Run:
     return _clean(run)
 
 
+# ---------------------------------------------------------------- JSON (full backup)
+
+def load_json_bytes(data: bytes, name: str) -> Run:
+    import json
+
+    try:
+        d = json.loads(data.decode("utf-8-sig"))
+        samples = d["samples"]
+    except Exception as e:  # noqa: BLE001
+        raise LoadError(f"{name}: not a run backup") from e
+    if not isinstance(samples, list) or len(samples) < 2:
+        raise LoadError(f"{name}: no samples")
+
+    def col(key):
+        return _floats([s.get(key) for s in samples])
+
+    fused = sum(1 for s in samples if s.get("fused"))
+    return _clean(Run(name=str(d.get("name") or name), t=col("t"), lat=col("lat"), lon=col("lon"), alt=col("alt"),
+                      speed=col("speed"), long_acc=col("longAccel"), lat_acc=col("latAccel"), dist=col("distance"),
+                      heading=col("heading"), start=_parse_time(str(d.get("startDate") or "")),
+                      driver=str(d.get("driver") or ""), run_type=str(d.get("runType") or ""),
+                      notes=str(d.get("notes") or ""),
+                      source="GPS + IMU fusion" if fused > len(samples) / 2 else "GPS only"))
+
+
 # ---------------------------------------------------------------- dispatch
 
 def _apply_index(run: Run, meta: dict | None):
@@ -320,11 +345,13 @@ def _load_member(ext: str, data: bytes, name: str) -> Run:
         return load_xlsx_bytes(data, name)
     if ext == ".gpx":
         return load_gpx_text(data.decode("utf-8", errors="replace"), name)
+    if ext == ".json":
+        return load_json_bytes(data, name)
     raise LoadError(f"{name}: unsupported file type")
 
 
 def load_zip(path: str) -> tuple[list[Run], list[str]]:
-    """Loads every run in a Cone Setter zip. Returns (runs, problems)."""
+    """Loads every run in a OBRA Essentials zip. Returns (runs, problems)."""
     runs, problems = [], []
     try:
         z = zipfile.ZipFile(path)
@@ -346,14 +373,14 @@ def load_zip(path: str) -> tuple[list[Run], list[str]]:
                 for row in csv.DictReader(io.StringIO(text, newline="")):
                     if row.get("file"):
                         index[row["file"]] = row
-            elif ext in (".csv", ".xlsx", ".gpx"):
+            elif ext in (".csv", ".json", ".xlsx", ".gpx"):
                 members.setdefault(stem, {})[ext] = info.filename
         if not members:
             raise LoadError(f"{os.path.basename(path)}: no runs inside")
         order = [s for s in index if s in members] + [s for s in members if s not in index]
         for stem in order:
             exts = members[stem]
-            ext = next(e for e in (".csv", ".xlsx", ".gpx") if e in exts)   # CSV is the most complete
+            ext = next(e for e in (".csv", ".json", ".xlsx", ".gpx") if e in exts)
             try:
                 run = _load_member(ext, z.read(exts[ext]), stem)
                 _apply_index(run, index.get(stem))
@@ -374,9 +401,9 @@ def load_path(path: str) -> tuple[list[Run], list[str]]:
             return load_zip(path)
         with open(path, "rb") as f:
             data = f.read()
-        if ext in (".csv", ".xlsx", ".gpx"):
+        if ext in (".csv", ".json", ".xlsx", ".gpx"):
             return [_load_member(ext, data, name)], []
-        return [], [f"{os.path.basename(path)}: open a .zip, .csv, .xlsx or .gpx exported from Cone Setter"]
+        return [], [f"{os.path.basename(path)}: open a .zip, .csv, .xlsx, .gpx or backup .json exported from OBRA Essentials"]
     except LoadError as e:
         return [], [str(e)]
     except OSError as e:

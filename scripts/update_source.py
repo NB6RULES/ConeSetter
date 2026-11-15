@@ -11,7 +11,7 @@ parser.add_argument("--size", required=True, type=int)
 parser.add_argument("--url", required=True)
 parser.add_argument("--notes", default="")
 parser.add_argument("--source", default="source.json")
-parser.add_argument("--bundle", default="com.nb6rules.conesetter")
+parser.add_argument("--bundle", default="com.nb6rules.obraessentials")
 args = parser.parse_args()
 
 path = Path(args.source)

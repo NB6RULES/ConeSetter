@@ -30,6 +30,8 @@ enum RunBulkExport {
                     files.append(.init(name: "\(base).csv", data: Data(RunExcelExporter.csv(run: run, unit: unit).utf8)))
                 case .gpx:
                     files.append(.init(name: "\(base).gpx", data: Data(RunExcelExporter.gpx(run: run).utf8)))
+                case .json:
+                    if let data = try? RunStore.encoder.encode(run) { files.append(.init(name: "\(base).json", data: data)) }
                 }
             }
             runs.append(run)
