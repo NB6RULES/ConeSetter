@@ -1,21 +1,68 @@
+<div align="center">
+
+<img src="docs/icon.png" width="128" alt="OBRA Essentials icon">
+
 # OBRA Essentials
 
-> **Downloads**
-> - **Windows run analyzer:** [OBRA-Run-Analyzer.exe](https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe) (always the newest build; it updates itself)
-> - **iPhone app:** add `https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json` as a source in SideStore
+**The Oxford Brookes Racing Autonomous toolkit: lay out cones, log runs, view CAD, tune the motor controller, and analyse it all on a PC.**
 
-iPhone toolkit for Oxford Brookes Racing Autonomous, formerly called Cone Setter. Four tabs:
+<a href="https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe"><img src="https://img.shields.io/badge/Download-Windows%20Run%20Analyzer%20(.exe)-0078D4?style=for-the-badge&logo=windows11&logoColor=white" alt="Download the Windows Run Analyzer" height="44"></a>
+&nbsp;
+<a href="https://github.com/NB6RULES/ConeSetter/releases/latest/download/ConeSetter.ipa"><img src="https://img.shields.io/badge/Download-iPhone%20app%20(.ipa)-FF6B12?style=for-the-badge&logo=apple&logoColor=white" alt="Download the iPhone app" height="44"></a>
 
-- **Cones:** uses ARKit and the LiDAR scanner to lay out Formula Student / FS-AI test tracks. It shows a ghost cone on the ground for every cone in the layout, guides you to it, and uses each cone you place as a reference for the next ones.
-- **GPS:** 10 Hz speed logger with a heatmap track, graphs and exports.
-- **3D:** offline CAD and 3D file viewer.
-- **FarLink:** dashboard, tuning and registers for FarDriver motor controllers over Bluetooth.
+<a href="https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json"><img src="https://img.shields.io/badge/SideStore-source%20link-8A2BE2?style=for-the-badge&logo=rss&logoColor=white" alt="SideStore source" height="32"></a>
+&nbsp;
+<a href="https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/demo-runs.zip"><img src="https://img.shields.io/badge/Try%20it-demo%20runs%20(.zip)-35D07F?style=for-the-badge&logo=files&logoColor=white" alt="Demo runs" height="32"></a>
 
-The app keeps the bundle ID `com.nb6rules.conesetter` and this repository name, so SideStore updates the existing install in place and saved sessions and runs stay.
+<br>
 
-Built for the iPhone 17 Pro Max. Works on any LiDAR iPhone on iOS 18 or later.
+![iPhone app version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FConeSetter%2Fmain%2Fsource.json&query=%24.apps%5B0%5D.version&label=iPhone%20app&color=FF6B12&style=flat-square&logo=apple)
+![Windows analyzer version](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FConeSetter%2Fmain%2Fdesktop%2Flatest.json&query=%24.version&label=Windows%20analyzer&color=0078D4&style=flat-square)
+![Windows analyzer build](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FNB6RULES%2FConeSetter%2Fmain%2Fdesktop%2Flatest.json&query=%24.build&label=build&color=0078D4&style=flat-square)
+[![Build IPA](https://github.com/NB6RULES/ConeSetter/actions/workflows/build.yml/badge.svg)](https://github.com/NB6RULES/ConeSetter/actions/workflows/build.yml)
+[![Build Windows analyzer](https://github.com/NB6RULES/ConeSetter/actions/workflows/desktop.yml/badge.svg)](https://github.com/NB6RULES/ConeSetter/actions/workflows/desktop.yml)
+![iOS 18+](https://img.shields.io/badge/iOS-18%2B-111111?style=flat-square&logo=ios)
+![Windows 10 / 11](https://img.shields.io/badge/Windows-10%20%2F%2011-111111?style=flat-square&logo=windows)
 
-## Install with SideStore
+</div>
+
+---
+
+## What's inside
+
+| | Tool | What it does |
+|:-:|---|---|
+| 🟠 | **Cones** (iPhone) | AR + LiDAR guide for laying out FS-AI skidpad, acceleration and autocross tracks, cone by cone |
+| 🔵 | **GPS** (iPhone) | 10 Hz GPS + IMU speed logger: heatmap track, graphs, driver / run type / notes, Excel / CSV / GPX, several runs in one zip |
+| 🟣 | **3D** (iPhone) | Offline viewer for STEP, IGES, STL, DXF, OBJ, 3MF, glTF, Blender and more |
+| 🟢 | **FarLink** (iPhone) | Dashboard, tuning and registers for FarDriver motor controllers over Bluetooth |
+| 🪟 | **Run Analyzer** (Windows) | Plays runs back on the track, times laps between start / finish lines you place, overlays laps |
+
+<div align="center">
+
+<img src="docs/analyzer.png" width="900" alt="OBRA Run Analyzer playing back a run">
+
+*OBRA Run Analyzer on Windows: track coloured by speed, live readouts, start / finish line and lap table.*
+
+<img src="docs/analyzer-compare.png" width="900" alt="Lap comparison in OBRA Run Analyzer">
+
+*Lap compare: speed against distance for the chosen laps, and time lost or gained against the fastest.*
+
+</div>
+
+## 🪟 Get the Windows Run Analyzer
+
+1. Press the blue **Download** button above. It always gives the newest build of `OBRA-Run-Analyzer.exe`, a single file with no installer.
+2. Run it. Windows may say "Windows protected your PC" because the file isn't signed: choose *More info*, then *Run anyway*.
+3. Drop in a zip saved from the app's GPS tab (*Select* → *Save as zip*), or the demo runs above.
+
+The analyzer checks for a newer build every time it starts and offers to update itself. Details: [desktop/README.md](desktop/README.md).
+
+## 📱 Get the iPhone app
+
+Formerly called Cone Setter. It keeps the bundle ID `com.nb6rules.conesetter` and this repository name, so SideStore updates an existing install in place and saved sessions and runs stay. Built for the iPhone 17 Pro Max; works on any LiDAR iPhone on iOS 18 or later.
+
+### Install with SideStore
 
 Add this source in SideStore (**Sources → +**):
 
@@ -25,7 +72,7 @@ https://raw.githubusercontent.com/NB6RULES/ConeSetter/main/source.json
 
 Every push to `main` builds a new unsigned IPA on GitHub Actions, publishes it as a release and updates `source.json`, so SideStore shows the update.
 
-## How placing works
+## 🟠 Cones tab: how placing works
 
 1. **Pick a layout.** Skidpad and acceleration are generated from FS dimensions (all editable). Autocross / trackdrive come from a CSV.
 2. **Mark two references.** Tape A and B on the ground (e.g. both skidpad circle centres, or the acceleration start and finish line centres). In the app, aim the crosshair at A and tap *Set A*, then the same for B. The app checks the A–B distance against the plan.
@@ -37,7 +84,7 @@ The top-left chips show tracking state, LiDAR mapping, phone GPS accuracy, and t
 
 Sessions save the progress, the ARKit world map and a GPS site tag. On a later test day, open the session and walk around: if the saved map is recognised, it carries on; otherwise tap A and B again and it restores the cones you already placed.
 
-## GPS tab (speed logger)
+## 🔵 GPS tab (speed logger)
 
 Records the car's speed with timestamps and coordinates, and keeps running with the screen locked.
 
@@ -51,17 +98,13 @@ Records the car's speed with timestamps and coordinates, and keeps running with 
 
 CI runs `Tests/Harness/main.swift`, which simulates laps with noisy GPS, IMU and barometer and an arbitrary phone mount, before every build. Its outputs, including a sample Excel export, are attached to the `ci-test` pre-release.
 
-## FarLink tab (FarDriver motor controllers)
+## 🟢 FarLink tab (FarDriver motor controllers)
 
 FarLink, previously a separate app ([NB6RULES/Farlink](https://github.com/NB6RULES/Farlink)), is built in as the fourth tab. The connection bar at the top opens the scanner (or a demo controller). Below it, **Dash** shows live speed, power, battery, currents and temperatures; **Tune** edits the catalogued parameters; **Registers** reads and writes raw registers and shows the traffic log; **Settings** covers the handshake, units, wheel size and write safety. Bluetooth permission is only asked for the first time this tab is opened. Settings from the standalone FarLink app are not carried over.
 
 The protocol code is checked in CI by `Tests/FarLinkHarness/main.swift`. It is built on community reverse-engineering of the FarDriver protocol (jackhumbert/fardriver-controllers) and is not affiliated with Nanjing FarDriver.
 
-## Windows run analyzer
-
-`desktop/` holds **OBRA Run Analyzer**, a Windows app that plays runs back and times laps between start and finish lines you place on the track. See [desktop/README.md](desktop/README.md).
-
-## 3D tab (CAD and 3D file viewer)
+## 🟣 3D tab (CAD and 3D file viewer)
 
 Opens 3D files offline, from the in-app picker or by sharing a file to Cone Setter from the Files app.
 
