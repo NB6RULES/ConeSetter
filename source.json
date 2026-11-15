@@ -27,7 +27,7 @@
           "buildVersion": "15",
           "date": "2026-11-15T20:09:32Z",
           "localizedDescription": "OBRA Essentials 3.0: new bundle ID and links, import runs from a zip, full-backup export; analyzer 1.2 opens backups",
-          "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v3.0.0-b15/OBRA-Essentials.ipa",
+          "downloadURL": "https://github.com/NB6RULES/OBRA-Essentials/releases/download/v3.0.0-b15/OBRA-Essentials.ipa",
           "size": 6279964,
           "minOSVersion": "18.0"
         }
@@ -44,7 +44,7 @@
       "version": "3.0.0",
       "versionDate": "2026-11-15T20:09:32Z",
       "versionDescription": "OBRA Essentials 3.0: new bundle ID and links, import runs from a zip, full-backup export; analyzer 1.2 opens backups",
-      "downloadURL": "https://github.com/NB6RULES/ConeSetter/releases/download/v3.0.0-b15/OBRA-Essentials.ipa",
+      "downloadURL": "https://github.com/NB6RULES/OBRA-Essentials/releases/download/v3.0.0-b15/OBRA-Essentials.ipa",
       "size": 6279964
     }
   ],

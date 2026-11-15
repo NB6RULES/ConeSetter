@@ -62,8 +62,6 @@ The analyzer checks for a newer build every time it starts and offers to update 
 
 Built for the iPhone 17 Pro Max; works on any LiDAR iPhone on iOS 18 or later.
 
-> **Coming from Cone Setter?** OBRA Essentials 3.0 has its own bundle ID (`com.nb6rules.obraessentials`), so it installs as a new app next to the old one. In the old app, open the speed tab, tap **Select**, tick your runs and **Save as zip** (CSV or all formats). In OBRA Essentials, open **GPS → gear → Import runs** and pick that zip. Keep the old app until you have checked the import; cone sessions and 3D files are not carried across.
-
 ### Install with SideStore
 
 Add this source in SideStore (**Sources → +**):
@@ -118,7 +116,7 @@ Opens 3D files offline, from the in-app picker or by sharing a file to OBRA Esse
 - **Viewer:** orbit, pinch-zoom and pan; Iso / Front / Back / Left / Right / Top / Bottom views; feature edges; perspective or orthographic; Y-up or Z-up; overall size, triangle and part counts.
 - **Closed formats** (SolidWorks .sldprt, CATIA .CATPart, NX / Creo .prt, Fusion .f3d, Inventor .ipt, DWG, Parasolid, JT) can't be read by anything but their own software. The app says so, shows the export steps for a STEP or DXF, and shows the preview picture embedded in the file when there is one.
 
-The viewer is the [Online 3D Viewer](https://github.com/kovacsv/Online3DViewer) engine in a web view, with `occt-import-js`, `rhino3dm` and `draco3d` bundled under `ConeSetter/Resources/Viewer/libs` (licences in `LICENSES.txt`).
+The viewer is the [Online 3D Viewer](https://github.com/kovacsv/Online3DViewer) engine in a web view, with `occt-import-js`, `rhino3dm` and `draco3d` bundled under `OBRAEssentials/Resources/Viewer/libs` (licences in `LICENSES.txt`).
 
 ## CSV format
 

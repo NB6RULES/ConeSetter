@@ -1,7 +1,7 @@
 {
   "version": "1.2.0",
   "build": 7,
-  "url": "https://github.com/NB6RULES/ConeSetter/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe",
+  "url": "https://github.com/NB6RULES/OBRA-Essentials/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe",
   "notes": "OBRA Essentials 3.0: new bundle ID and links, import runs from a zip, full-backup export; analyzer 1.2 opens backups",
   "date": "2026-11-15",
   "size": 73751529
