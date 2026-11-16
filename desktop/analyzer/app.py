@@ -6,13 +6,14 @@ import json
 import math
 import os
 import sys
+from datetime import timezone
 
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtCore import Qt
 
-from . import __version__, tiles, updater
+from . import __version__, canlog, tiles, updater
 from .data import G, Run, load_path, safe_filename, site_key, to_local
 from .laps import (Gate, Lap, best_lap, delta_to, find_laps, format_lap_time, gate_from_xy, lap_trace, laps_csv)
 
@@ -47,7 +48,12 @@ QPushButton#primary {{ background: {ACCENT}; border-color: {ACCENT}; color: whit
 QPushButton#primary:hover {{ background: #FF7F33; }}
 QComboBox, QDoubleSpinBox {{ background: {SURFACE_HI}; border: 1px solid #34353E; border-radius: 8px; padding: 4px 8px; }}
 QComboBox QAbstractItemView {{ background: {SURFACE_HI}; selection-background-color: {ACCENT}; }}
-QListWidget, QTableWidget {{ background: {SURFACE}; border: 1px solid #2A2B33; border-radius: 10px; outline: none; }}
+QListWidget, QTableWidget, QTreeWidget {{ background: {SURFACE}; border: 1px solid #2A2B33; border-radius: 10px; outline: none; }}
+QTreeWidget::item {{ padding: 2px 0; }}
+QTreeWidget::indicator {{ width: 12px; height: 12px; border: 1px solid #6A6C76; border-radius: 3px; background: {SURFACE_HI}; }}
+QTreeWidget::indicator:checked {{ background: {ACCENT}; border-color: {ACCENT}; }}
+QTreeWidget::item:selected {{ background: #3A2A20; color: {TEXT}; }}
+QLineEdit {{ background: {SURFACE_HI}; border: 1px solid #34353E; border-radius: 8px; padding: 5px 8px; }}
 QListWidget::item {{ padding: 8px; border-bottom: 1px solid #25262D; }}
 QListWidget::item:selected, QTableWidget::item:selected {{ background: #3A2A20; color: {TEXT}; }}
 QHeaderView::section {{ background: {SURFACE_HI}; border: none; padding: 5px; color: {MUTED}; font-weight: 700; }}
@@ -229,6 +235,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._sat_cache: dict = {}
         self._sat_pending: set = set()
         self._sat_status = ""
+        self.dbc: canlog.Dbc | None = None
+        self.carlog: canlog.CarLog | None = None
+        self.car_offsets: dict[int, float] = {}
+        self.car_plots: list = []
+        self._car_status = ""
+        self._car_values_at = 0.0
         self._load_settings()
 
         self._build()
@@ -376,6 +388,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.open_btn = QtWidgets.QPushButton("Open runs…")
         self.open_btn.setObjectName("primary")
         self.open_btn.clicked.connect(self.open_dialog)
+        self.car_btn = QtWidgets.QPushButton("Open car log…")
+        self.car_btn.setToolTip("Open an MF4 log from the car and the DBC that describes it")
+        self.car_btn.clicked.connect(self.open_car_dialog)
         self.unit_box = QtWidgets.QComboBox()
         self.unit_box.addItems(list(UNITS))
         self.unit_box.setCurrentText(self.unit)
@@ -397,7 +412,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_btn.setToolTip("Check for updates")
         self.update_btn.setFlat(True)
         self.update_btn.clicked.connect(lambda: self.check_updates(manual=True))
-        outer.addLayout(row(self.open_btn, _stretch(self.heading), self.update_btn,
+        outer.addLayout(row(self.open_btn, self.car_btn, _stretch(self.heading), self.update_btn,
                             label("Map", "muted"), self.map_box,
                             label("Colour track by", "muted"), self.color_box,
                             label("Graphs against", "muted"), self.x_box,
@@ -413,7 +428,8 @@ class MainWindow(QtWidgets.QMainWindow):
         t1 = label("Open your speed runs", "hero")
         t1.setAlignment(Qt.AlignCenter)
         t2 = label("Drop a .zip from “Save as zip” in the phone app here, or a single .csv, .xlsx or .gpx export.\n"
-                   "Then play the run back, and set a start / finish line to get lap times.", "muted")
+                   "Then play the run back, and set a start / finish line to get lap times.\n"
+                   "Car logs work too: drop an .mf4 and its .dbc to see the CAN signals, with or without a GPS run.", "muted")
         t2.setAlignment(Qt.AlignCenter)
         b = QtWidgets.QPushButton("Open runs…")
         b.setObjectName("primary")
@@ -532,6 +548,7 @@ class MainWindow(QtWidgets.QMainWindow):
             p.scene().sigMouseClicked.connect(lambda ev, plot=p: self._plot_clicked(ev, plot))
         self.p_speed.getAxis("bottom").setStyle(showValues=False)
         self.p_acc.getAxis("bottom").setStyle(showValues=False)
+        self.p_speed.sigXRangeChanged.connect(lambda _, rng: self._sync_x(getattr(self, "_car_master", None), rng))
         tl.addWidget(self.p_speed, 5)
         tl.addWidget(self.p_acc, 4)
         tl.addWidget(self.p_elev, 3)
@@ -554,9 +571,24 @@ class MainWindow(QtWidgets.QMainWindow):
         cl.addWidget(self.p_delta, 2)
         cl.addWidget(self.cmp_hint)
         self.tabs.addTab(cw, "Lap compare")
+        self.tabs.addTab(self._build_car_tab(), "Car data")
+        self.tabs.currentChanged.connect(lambda _: self._update_car_values(force=True))
         split.addWidget(self.tabs)
         split.setSizes([470, 380])
+        self.centre_split = split
+        self.tabs.currentChanged.connect(lambda _: self._balance_centre())
         return split
+
+    def _balance_centre(self):
+        """Gives the Car data tab more room; a car log without GPS needs almost no map."""
+        total = sum(self.centre_split.sizes()) or 850
+        if self.run is not None and not self.run.has_gps:
+            share = 0.14
+        elif self.tabs.currentIndex() == 2:
+            share = 0.36
+        else:
+            share = 0.55
+        self.centre_split.setSizes([int(total * share), int(total * (1 - share))])
 
     def _build_right(self) -> QtWidgets.QWidget:
         w = QtWidgets.QWidget()
@@ -710,15 +742,26 @@ class MainWindow(QtWidgets.QMainWindow):
     def open_dialog(self):
         last = self.settings.value("lastDir", "") if self.persist else ""
         paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
-            self, "Open runs", last, "Run exports (*.zip *.csv *.xlsx *.gpx *.json);;All files (*)")
+            self, "Open runs", last, "Runs and car logs (*.zip *.csv *.xlsx *.gpx *.json *.mf4 *.dbc);;All files (*)")
         if paths:
             if self.persist:
                 self.settings.setValue("lastDir", os.path.dirname(paths[0]))
             self.open_files(paths)
 
+    def open_car_dialog(self):
+        last = self.settings.value("lastCarDir", "") if self.persist else ""
+        paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
+            self, "Open a car log and its DBC", last, "Car logs and DBC (*.mf4 *.mf *.dat *.dbc);;All files (*)")
+        if paths:
+            if self.persist:
+                self.settings.setValue("lastCarDir", os.path.dirname(paths[0]))
+            self.open_files(paths)
+
     def open_files(self, paths: list[str], quiet: bool = False) -> list[str]:
         problems: list[str] = []
         added = 0
+        car_paths = [p for p in paths if os.path.splitext(p)[1].lower() in (".mf4", ".mf", ".dat", ".dbc")]
+        paths = [p for p in paths if p not in car_paths]
         QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             for p in paths:
@@ -733,6 +776,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if added:
             self.stack.setCurrentIndex(1)
             self.run_list.setCurrentRow(len(self.runs) - added)
+        if car_paths:
+            QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
+            try:
+                problems += self._open_car_files(car_paths)
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor()
         if problems and not quiet:
             QtWidgets.QMessageBox.warning(self, "Some files couldn't be opened", "\n".join(problems[:12]))
         return problems
@@ -761,9 +810,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._set_pick(None)
         self.run = run
         has = run is not None
-        for wdg in (self.play_btn, self.slider, self.pick_start, self.start_here, self.pick_finish, self.finish_here,
-                    self.width_box, self.both_ways):
+        for wdg in (self.play_btn, self.slider):
             wdg.setEnabled(has)
+        for wdg in (self.pick_start, self.start_here, self.pick_finish, self.finish_here, self.width_box, self.both_ways):
+            wdg.setEnabled(has and run.has_gps)
         if not has:
             self.heading.setText("OBRA Run Analyzer")
             return
@@ -782,6 +832,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._draw_gg_cloud()
         self._recompute_laps()
         self.map.getPlotItem().vb.autoRange(padding=0.08)
+        self._car_run_changed()
+        self._balance_centre()
         self.seek(self.t_lo)
 
     def _site(self) -> dict:
@@ -819,6 +871,10 @@ class MainWindow(QtWidgets.QMainWindow):
         r = self.run
         if r is None:
             return
+        if not r.has_gps:
+            self.track_item.setData(x=[], y=[])
+            self.legend.setText("This is a car log without GPS, so there is no map. Open a run from the phone app to add one.")
+            return
         idx = self._stride(len(r.t), 7000)
         mode = self.color_box.currentIndex()
         f = UNITS[self.unit]
@@ -852,7 +908,7 @@ class MainWindow(QtWidgets.QMainWindow):
         r = self.run
         self.sat_item.setVisible(False)
         self.credit.setText("")
-        if r is None or not self.satellite:
+        if r is None or not self.satellite or not r.has_gps:
             return
         box = tiles.padded_box(float(r.lat.min()), float(r.lat.max()), float(r.lon.min()), float(r.lon.max()))
         rng = tiles.range_for(*box)
@@ -895,6 +951,457 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sat_item.setVisible(True)
         self.credit.setText(tiles.ATTRIBUTION)
 
+    # ------------------------------------------------------------ car data (MF4 + DBC)
+
+    def _build_car_tab(self) -> QtWidgets.QWidget:
+        w = QtWidgets.QWidget()
+        lay = QtWidgets.QHBoxLayout(w)
+        lay.setContentsMargins(6, 6, 6, 6)
+        lay.setSpacing(8)
+
+        left = QtWidgets.QVBoxLayout()
+        left.setSpacing(4)
+        self.car_filter = QtWidgets.QLineEdit()
+        self.car_filter.setPlaceholderText("Find a signal…")
+        self.car_filter.setClearButtonEnabled(True)
+        self.car_filter.textChanged.connect(self._filter_car_tree)
+        self.car_tree = QtWidgets.QTreeWidget()
+        self.car_tree.setHeaderLabels(["Signal", "Value now"])
+        self.car_tree.setRootIsDecorated(True)
+        self.car_tree.setUniformRowHeights(True)
+        self.car_tree.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.car_tree.header().setSectionResizeMode(1, QtWidgets.QHeaderView.Interactive)
+        self.car_tree.header().resizeSection(1, 124)
+        self.car_tree.setTextElideMode(Qt.ElideMiddle)
+        self.car_tree.header().setStretchLastSection(False)
+        self.car_tree.itemChanged.connect(self._car_item_changed)
+        left.addWidget(self.car_filter)
+        left.addWidget(self.car_tree, 1)
+        lw = QtWidgets.QWidget()
+        lw.setLayout(left)
+        lw.setMinimumWidth(350)
+        lw.setMaximumWidth(480)
+        lay.addWidget(lw, 0)
+
+        right = QtWidgets.QVBoxLayout()
+        right.setSpacing(4)
+        self.car_offset = QtWidgets.QDoubleSpinBox()
+        self.car_offset.setRange(-1e7, 1e7)
+        self.car_offset.setDecimals(2)
+        self.car_offset.setSingleStep(0.1)
+        self.car_offset.setSuffix(" s")
+        self.car_offset.setToolTip("Seconds added to the car log's time to line it up with the GPS run")
+        self.car_offset.valueChanged.connect(self._car_offset_changed)
+        self.car_clock_btn = QtWidgets.QPushButton("Use clocks")
+        self.car_clock_btn.setToolTip("Line the log up using the logger's clock and the phone's GPS time")
+        self.car_clock_btn.clicked.connect(self._car_use_clocks)
+        self.car_match_btn = QtWidgets.QPushButton("Match speed")
+        self.car_match_btn.setToolTip("Click a vehicle-speed or wheel-speed signal in the list, then press this to "
+                                      "find the offset where it best follows the GPS speed")
+        self.car_match_btn.clicked.connect(self._car_match)
+        self.car_gps_box = QtWidgets.QCheckBox("GPS speed")
+        self.car_gps_box.setChecked(True)
+        self.car_gps_box.toggled.connect(lambda _: self._draw_car_plots())
+        right.addLayout(row(label("Log offset", "muted"), self.car_offset, self.car_clock_btn, self.car_match_btn,
+                            None, self.car_gps_box, spacing=8))
+        self.car_status = label("", "muted", wrap=True)
+        right.addWidget(self.car_status)
+        self.car_plot_box = QtWidgets.QVBoxLayout()
+        self.car_plot_box.setSpacing(2)
+        holder = QtWidgets.QWidget()
+        holder.setLayout(self.car_plot_box)
+        right.addWidget(holder, 1)
+        self.car_empty = label("Open a car log (.mf4) together with its .dbc to see the CAN signals here, on the same "
+                               "timeline as the GPS run. Use “Open car log…” at the top, or drop both files on the window.",
+                               "muted", wrap=True)
+        self.car_empty.setAlignment(Qt.AlignCenter)
+        self.car_plot_box.addWidget(self.car_empty, 1)
+        rw = QtWidgets.QWidget()
+        rw.setLayout(right)
+        lay.addWidget(rw, 1)
+        self._car_controls_enabled()
+        return w
+
+    def _car_controls_enabled(self):
+        on = self.carlog is not None and self.run is not None
+        for wdg in (self.car_offset, self.car_clock_btn, self.car_match_btn, self.car_gps_box, self.car_filter):
+            wdg.setEnabled(on)
+
+    def _open_car_files(self, paths: list[str]) -> list[str]:
+        """Loads .dbc and .mf4 files. Returns problems."""
+        problems: list[str] = []
+        new_dbc = False
+        for p in paths:
+            if p.lower().endswith(".dbc"):
+                try:
+                    self.dbc = canlog.load_dbc(p)
+                    new_dbc = True
+                    if self.persist:
+                        self.settings.setValue("lastDbc", p)
+                except (canlog.CanLogError, OSError) as e:
+                    problems.append(str(e))
+        logs = [p for p in paths if not p.lower().endswith(".dbc")]
+        remembered = ""
+        if logs and self.dbc is None and self.persist:
+            last = str(self.settings.value("lastDbc", "") or "")
+            if last and os.path.exists(last):
+                try:
+                    self.dbc = canlog.load_dbc(last)
+                    remembered = f"Using the DBC from last time: {self.dbc.name}."
+                except (canlog.CanLogError, OSError):
+                    self.dbc = None
+        loaded = None
+        for p in logs[-1:]:          # one car log at a time
+            try:
+                loaded = canlog.load_car_log(p, self.dbc)
+            except canlog.CanLogError as e:
+                problems.append(str(e))
+            except Exception as e:  # noqa: BLE001
+                problems.append(f"{os.path.basename(p)}: {e}")
+        if len(logs) > 1:
+            problems.append("One car log is shown at a time; the last one you picked was opened.")
+        if loaded is None and new_dbc and self.carlog is not None and self.carlog.frames is not None:
+            loaded = canlog.decode(self.carlog.frames, self.dbc, self.carlog.name)     # same log, new DBC
+        if loaded is None:
+            if new_dbc and not logs:
+                self._car_status = f"DBC loaded: {self.dbc.name}. Now open the car log (.mf4)."
+                self.car_status.setText(self._car_status)
+            return problems
+        if remembered:
+            loaded.notes.insert(0, remembered)
+        self.carlog = loaded
+        self.car_offsets = {}
+        if not self.runs or all(not r.has_gps for r in self.runs):
+            self._add_log_only_run(loaded)
+        self._fill_car_tree()
+        self._car_run_changed()
+        self.stack.setCurrentIndex(1)
+        self.tabs.setCurrentIndex(2)
+        return problems
+
+    def _add_log_only_run(self, log: canlog.CarLog):
+        """Lets a car log be played on its own: a run with time and (if the log has one) speed, but no map."""
+        t0 = min((float(s.t[0]) for s in log.series if len(s.t)), default=0.0)
+        t = np.arange(0.0, max(log.duration, 0.2) + 0.05, 0.1) + t0
+        speed = np.zeros_like(t)
+        for s in log.series:
+            unit = s.unit.lower().replace(" ", "")
+            if s.decoded and len(s.t) > 10 and unit in ("km/h", "kmh", "kph", "m/s", "mph") and np.ptp(s.values) > 0:
+                factor = {"m/s": 1.0, "mph": 0.44704}.get(unit, 1 / 3.6)
+                speed = np.interp(t, s.t, np.abs(s.values)) * factor
+                break
+        dist = np.concatenate([[0.0], np.cumsum((speed[1:] + speed[:-1]) / 2 * np.diff(t))])
+        zeros = np.zeros_like(t)
+        run = Run(name=f"{log.name} (car log)", t=t, lat=zeros.copy(), lon=zeros.copy(), alt=zeros.copy(), speed=speed,
+                  long_acc=np.gradient(speed, t), lat_acc=zeros.copy(), dist=dist, heading=zeros.copy(),
+                  start=log.start, source="Car log only, no GPS", has_gps=False)
+        self.runs = [r for r in self.runs if r.has_gps]
+        self.run_list.blockSignals(True)
+        self.run_list.clear()
+        for r in self.runs:
+            self._add_run_item(r)
+        self.runs.append(run)
+        self._add_run_item(run)
+        self.run_list.blockSignals(False)
+        self.car_offsets[id(run)] = 0.0
+        self.run_list.setCurrentRow(len(self.runs) - 1)
+
+    def _fill_car_tree(self):
+        log = self.carlog
+        self.car_tree.blockSignals(True)
+        self.car_tree.clear()
+        self.car_filter.clear()
+        if log is None:
+            self.car_tree.blockSignals(False)
+            return
+        groups: dict[str, QtWidgets.QTreeWidgetItem] = {}
+        ranked = []
+        for s in log.series:
+            top = groups.get(s.group)
+            if top is None:
+                top = QtWidgets.QTreeWidgetItem([s.group, ""])
+                top.setFlags(Qt.ItemIsEnabled)
+                f = top.font(0)
+                f.setBold(True)
+                top.setFont(0, f)
+                if not s.decoded:
+                    top.setForeground(0, QtGui.QColor(MUTED))
+                self.car_tree.addTopLevelItem(top)
+                groups[s.group] = top
+            moving = len(s.values) > 1 and float(np.ptp(s.values)) > 0
+            it = QtWidgets.QTreeWidgetItem([s.name + (f"  [{s.unit}]" if s.unit else ""), ""])
+            it.setData(0, Qt.UserRole, s.key)
+            it.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
+            it.setCheckState(0, Qt.Unchecked)
+            if not moving:
+                it.setForeground(0, QtGui.QColor(MUTED))
+            rate = (len(s.t) - 1) / (s.t[-1] - s.t[0]) if len(s.t) > 1 and s.t[-1] > s.t[0] else 0.0
+            tip = [f"{s.group}  ·  {s.name}"] + ([s.comment] if s.comment else [])
+            tip.append(f"{len(s.t):,} samples at about {rate:.0f} Hz")
+            tip.append(f"Range {np.nanmin(s.values):g} to {np.nanmax(s.values):g}" if moving else f"Constant at {s.text_at(1e18)}")
+            if s.choices:
+                tip.append("States: " + ", ".join(f"{k} = {v}" for k, v in sorted(s.choices.items())))
+            it.setToolTip(0, "\n".join(tip))
+            top.addChild(it)
+            if moving and s.decoded:
+                name = s.name.lower()
+                rank = next((i for i, k in enumerate(("speed", "steer", "brake", "hyd", "trq", "torque", "throttle", "state"))
+                             if k in name), 9)
+                ranked.append((rank, len(ranked), it))
+        picked, kinds = [], set()
+        for rank, _, it in sorted(ranked, key=lambda r: r[:2]):      # one of each kind first: a speed, a steer, a brake…
+            if rank not in kinds or rank == 9:
+                picked.append(it)
+                kinds.add(rank)
+        for it in picked[:3]:
+            it.setCheckState(0, Qt.Checked)
+        self.car_tree.expandAll()
+        self.car_tree.blockSignals(False)
+
+    def _filter_car_tree(self, text: str):
+        text = text.strip().lower()
+        for i in range(self.car_tree.topLevelItemCount()):
+            top = self.car_tree.topLevelItem(i)
+            shown = 0
+            for j in range(top.childCount()):
+                child = top.child(j)
+                hit = not text or text in child.text(0).lower() or text in top.text(0).lower()
+                child.setHidden(not hit)
+                shown += hit
+            top.setHidden(shown == 0)
+
+    def _car_items(self):
+        for i in range(self.car_tree.topLevelItemCount()):
+            top = self.car_tree.topLevelItem(i)
+            for j in range(top.childCount()):
+                yield top.child(j)
+
+    def _car_item_changed(self, item, column):
+        if column == 0 and item.data(0, Qt.UserRole):
+            self._draw_car_plots()
+
+    def _car_offset(self) -> float:
+        return self.car_offsets.get(id(self.run), 0.0) if self.run is not None else 0.0
+
+    def _car_run_changed(self):
+        """Works out how the car log lines up with the run now on screen."""
+        self._car_controls_enabled()
+        log, r = self.carlog, self.run
+        if log is None or r is None:
+            self._draw_car_plots()
+            return
+        if id(r) not in self.car_offsets:
+            off = canlog.clock_offset(log.start, r.start)
+            ok = off is not None and canlog.overlap(log, off, float(r.t[0]), float(r.t[-1])) > 0
+            self.car_offsets[id(r)] = off if ok else 0.0
+        self.car_offset.blockSignals(True)
+        self.car_offset.setValue(self.car_offsets[id(r)])
+        self.car_offset.blockSignals(False)
+        self._draw_car_plots()
+
+    def _car_offset_changed(self, v: float):
+        if self.run is None or self.carlog is None:
+            return
+        self.car_offsets[id(self.run)] = float(v)
+        self._draw_car_plots()
+        self._update_car_values(force=True)
+
+    def _car_use_clocks(self):
+        log, r = self.carlog, self.run
+        if log is None or r is None:
+            return
+        off = canlog.clock_offset(log.start, r.start)
+        if off is None:
+            QtWidgets.QMessageBox.information(self, "Car log", "One of the two files has no start time, so the clocks can't be used.")
+            return
+        self.car_offset.setValue(off)
+
+    def _car_match(self):
+        log, r = self.carlog, self.run
+        if log is None or r is None:
+            return
+        item = self.car_tree.currentItem()
+        series = log.find(item.data(0, Qt.UserRole)) if item is not None and item.data(0, Qt.UserRole) else None
+        if series is None:
+            QtWidgets.QMessageBox.information(self, "Match to GPS speed", "Click a vehicle-speed or wheel-speed signal in the list first.")
+            return
+        if not r.has_gps:
+            QtWidgets.QMessageBox.information(self, "Match to GPS speed", "This needs a GPS run from the phone app. Open one, then try again.")
+            return
+        found = canlog.align_by_signal(series, r.t, r.speed)
+        if found is None or found[1] < 0.5:
+            QtWidgets.QMessageBox.information(
+                self, "Match to GPS speed",
+                f"{series.name} doesn't follow the GPS speed closely enough to line the two up"
+                + (f" (best match {found[1]:.0%})." if found else ".") + " Pick a speed signal, or type the offset.")
+            return
+        self.car_offset.setValue(found[0])
+        self.car_status.setText(f"Lined up on {series.name}: offset {found[0]:+.2f} s, match {found[1]:.0%}.  " + self._car_summary())
+
+    def _car_summary(self) -> str:
+        log, r = self.carlog, self.run
+        if log is None:
+            return self._car_status
+        bits = [log.name]
+        if log.start:
+            bits.append(log.start.astimezone(timezone.utc).strftime("%d %b %Y %H:%M:%S UTC"))
+        bits.append(f"{log.duration / 60:.1f} min")
+        if log.frame_count:
+            bits.append(f"{log.frame_count:,} frames")
+        bits.append(f"DBC: {log.dbc_name}" if log.dbc_name else "no DBC")
+        text = "  ·  ".join(bits)
+        if r is not None and r.has_gps:
+            cover = canlog.overlap(log, self._car_offset(), float(r.t[0]), float(r.t[-1]))
+            if cover <= 0:
+                clock = canlog.clock_offset(log.start, r.start)
+                why = ""
+                if clock is not None and r.start is not None and log.start is not None:
+                    why = (f" By their clocks the log starts {log.start.astimezone(timezone.utc):%d %b %H:%M:%S} and the run "
+                           f"{r.start.astimezone(timezone.utc):%d %b %H:%M:%S} UTC.")
+                text += (f"\n<span style='color:{ACCENT}'>The log doesn't overlap this run at the current offset.{why} "
+                         "Type an offset, or match a speed signal to the GPS speed.</span>")
+            else:
+                text += f"\nCovers {cover / max(r.duration, 1e-9):.0%} of this run."
+        for n in log.notes[:3]:
+            text += "\n" + n
+        return text
+
+    def _draw_car_plots(self):
+        for plot in [p[1] for p in self.car_plots] + [getattr(self, "_car_gps_plot", None)]:
+            if plot is not None:
+                self.car_plot_box.removeWidget(plot)
+                plot.setParent(None)
+                plot.deleteLater()
+        self.car_plots = []
+        self._car_gps_plot = None
+        self._car_master = None
+        log, r = self.carlog, self.run
+        self.car_empty.setVisible(log is None)
+        if log is None or r is None:
+            return
+        self.car_status.setTextFormat(Qt.RichText)
+        chosen = [log.find(it.data(0, Qt.UserRole)) for it in self._car_items() if it.checkState(0) == Qt.Checked]
+        chosen = [s for s in chosen if s is not None]
+        extra = ""
+        if len(chosen) > 8:
+            extra = f"\nShowing the first 8 of {len(chosen)} ticked signals."
+            chosen = chosen[:8]
+        self.car_status.setText((self._car_summary() + extra).replace("\n", "<br>"))
+        offset = self._car_offset()
+        by_distance = self.x_box.currentIndex() == 1
+
+        def to_x(t_log):
+            t_run = t_log + offset
+            return np.interp(t_run, r.t, r.dist) if by_distance else t_run
+
+        def cursor_for(plot):
+            line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen("white", width=1.5), hoverPen=pg.mkPen(ACCENT, width=2))
+            line.setZValue(20)
+            line.sigDragged.connect(self._cursor_dragged)
+            plot.addItem(line)
+            plot.scene().sigMouseClicked.connect(lambda ev, pl=plot: self._plot_clicked(ev, pl))
+            return line
+
+        plots = []
+        if self.car_gps_box.isChecked() and r.has_gps:
+            p = make_plot()
+            p.getAxis("left").setWidth(110)
+            p.plot(self._xs(), r.speed * UNITS[self.unit], pen=pg.mkPen(ACCENT, width=2))
+            p.setTitle(f"<span style='color:{ACCENT}'>GPS speed</span> <span style='color:{MUTED}'>{self.unit}</span>", size="9pt")
+            self._car_gps_plot = p
+            self._car_gps_cursor = cursor_for(p)
+            plots.append(p)
+        for n, s in enumerate(chosen):
+            p = make_plot()
+            p.getAxis("left").setWidth(110)
+            color = LAP_COLORS[(n + 1) % len(LAP_COLORS)]
+            x = to_x(s.t)
+            sparse = s.is_state or len(s.t) < 4000
+            if sparse:
+                curve = p.plot(x, s.values, pen=pg.mkPen(color, width=1.8), stepMode="left")
+            else:
+                p.setDownsampling(auto=True, mode="peak")
+                p.setClipToView(True)
+                curve = p.plot(x, s.values, pen=pg.mkPen(color, width=1.5))
+            if s.choices:
+                seen = sorted({int(round(v)) for v in np.unique(s.values)[:40]})
+                p.getAxis("left").setTicks([[(v, (s.choices.get(v, str(v)))[:15]) for v in seen]])
+                lo, hi = (seen[0], seen[-1]) if seen else (0, 1)
+                p.setYRange(lo - 0.4, hi + 0.4, padding=0)
+            line = cursor_for(p)
+            self.car_plots.append((s, p, curve, line, color))
+            plots.append(p)
+        self._car_master = plots[0] if plots else None
+        for p in plots[1:]:
+            p.setXLink(plots[0])
+        if plots:
+            lo, hi = self.p_speed.getViewBox().viewRange()[0]
+            plots[0].setXRange(lo, hi, padding=0)
+            plots[0].sigXRangeChanged.connect(lambda _, rng: self._sync_x(self.p_speed, rng))
+        for i, p in enumerate(plots):
+            last = i == len(plots) - 1
+            p.getAxis("bottom").setStyle(showValues=last)
+            if last:
+                p.setLabel("bottom", "Distance (m)" if by_distance else "Time (s)", color=MUTED)
+            self.car_plot_box.addWidget(p, 13 if last else 10)      # the last one also carries the time axis
+        if not plots:
+            hint = make_plot()
+            hint.setTitle(f"<span style='color:{MUTED}'>Tick signals in the list to plot them</span>", size="10pt")
+            hint.hideAxis("left")
+            hint.hideAxis("bottom")
+            self._car_gps_plot = hint
+            self.car_plot_box.addWidget(hint, 1)
+        self._update_cursor()
+        self._update_car_values(force=True)
+
+    def _sync_x(self, target, rng):
+        """Keeps the Car data graphs and the Run graphs on the same time span."""
+        if getattr(self, "_syncing_x", False) or target is None:
+            return
+        self._syncing_x = True
+        try:
+            cur = target.getViewBox().viewRange()[0]
+            if abs(cur[0] - rng[0]) > 1e-6 or abs(cur[1] - rng[1]) > 1e-6:
+                target.setXRange(rng[0], rng[1], padding=0)
+        except RuntimeError:
+            pass
+        finally:
+            self._syncing_x = False
+
+    def _update_cursor_extra(self, x: float):
+        c = getattr(self, "_car_gps_cursor", None)
+        if c is not None and self._car_gps_plot is not None:
+            try:
+                c.blockSignals(True)
+                c.setValue(x)
+                c.blockSignals(False)
+            except RuntimeError:
+                self._car_gps_cursor = None
+
+    def _update_car_values(self, force: bool = False):
+        """Live values at the cursor: in the plot titles and the list. Skipped while the tab is hidden."""
+        log, r = self.carlog, self.run
+        if log is None or r is None or self.tabs.currentIndex() != 2:
+            return
+        self._update_cursor_extra(self._x_at(self.t))
+        now = QtCore.QTime.currentTime().msecsSinceStartOfDay()
+        if not force and 0 <= now - self._car_values_at < 90:
+            return
+        self._car_values_at = now
+        t_log = self.t - self._car_offset()
+        for s, p, _, _, color in self.car_plots:
+            inside = len(s.t) and s.t[0] <= t_log <= s.t[-1] + 1.0
+            value = s.text_at(t_log) if inside else "outside the log"
+            unit = f" <span style='color:{MUTED}'>{s.unit}</span>" if s.unit and not inside else ""
+            p.setTitle(f"<span style='color:{color}'>{s.name}</span>{unit} &nbsp; <b>{value}</b>", size="9pt")
+        for it in self._car_items():
+            if it.isHidden() or (it.parent() is not None and not it.parent().isExpanded()):
+                continue
+            s = log.find(it.data(0, Qt.UserRole))
+            if s is not None:
+                inside = len(s.t) and s.t[0] <= t_log <= s.t[-1] + 1.0
+                it.setText(1, s.text_at(t_log) if inside else "–")
+
     def _xs(self) -> np.ndarray:
         return self.run.dist if self.x_box.currentIndex() == 1 else self.run.t
 
@@ -919,6 +1426,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.p_speed.setLabel("left", self.unit, color=MUTED)
         self.p_elev.setLabel("bottom", "Distance (m)" if self.x_box.currentIndex() == 1 else "Time (s)", color=MUTED)
         self._draw_lap_lines()
+        self._draw_car_plots()
         self._apply_range()
         self._update_cursor()
 
@@ -1016,7 +1524,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self._updating = False
         v = r.value_at(r.speed, self.t)
         la, lt = r.value_at(r.long_acc, self.t) / G, r.value_at(r.lat_acc, self.t) / G
-        self.marker.setData(x=[r.value_at(r.x, self.t)], y=[r.value_at(r.y, self.t)])
+        if r.has_gps:
+            self.marker.setData(x=[r.value_at(r.x, self.t)], y=[r.value_at(r.y, self.t)])
+        else:
+            self.marker.setData(x=[], y=[])
         self.speed_big.setText(f"{v * f:.1f}")
         self.tiles["Time"].set(f"{self.t:.2f} s")
         self.tiles["Distance"].set(f"{r.value_at(r.dist, self.t):.0f} m")
@@ -1030,12 +1541,13 @@ class MainWindow(QtWidgets.QMainWindow):
         m = (r.t >= self.t - 1.5) & (r.t <= self.t)
         self.gg_trail.setData(-r.lat_acc[m] / G, r.long_acc[m] / G)
         self._update_cursor()
+        self._update_car_values()
 
     def _update_cursor(self):
         if self.run is None:
             return
         x = self._x_at(self.t)
-        for c in self.cursors:
+        for c in self.cursors + [p[3] for p in self.car_plots]:
             c.blockSignals(True)
             c.setValue(x)
             c.blockSignals(False)
@@ -1061,7 +1573,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _map_clicked(self, ev):
         r = self.run
-        if r is None or ev.button() != Qt.LeftButton:
+        if r is None or not r.has_gps or ev.button() != Qt.LeftButton:
             return
         vb = self.map.getPlotItem().vb
         if not vb.sceneBoundingRect().contains(ev.scenePos()):
@@ -1116,7 +1628,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.map.removeItem(it)
         self._gate_items = []
         r = self.run
-        if r is None:
+        if r is None or not r.has_gps:
             return
         site = self._site()
         circuit = site.get("finish") is None
@@ -1169,7 +1681,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if r is None:
             return
         site = self._site()
-        self.laps = find_laps(r, site.get("start"), site.get("finish"), one_way=not self.both_ways.isChecked())
+        self.laps = (find_laps(r, site.get("start"), site.get("finish"), one_way=not self.both_ways.isChecked())
+                     if r.has_gps else [])
         self._draw_gates()
         self._update_gate_hint()
         self._fill_lap_table()
@@ -1203,7 +1716,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.export_btn.setEnabled(bool(self.laps))
         if not self.laps:
             site = self._site()
-            self.lap_summary.setText("No laps yet." if site.get("start") is None else
+            self.lap_summary.setText("Laps need a GPS run." if not self.run.has_gps else
+                                     "No laps yet." if site.get("start") is None else
                                      "The car doesn't complete a timed pass through these lines on this run. "
                                      "Check the line positions, or tick “Either direction”.")
         else:
@@ -1326,7 +1840,8 @@ def run_selftest(win: MainWindow, app: QtWidgets.QApplication, out_dir: str, pat
         if win.runs:
             r = win.run
             win.seek(r.t[0] + r.duration * 0.2)
-            win._gate_at_cursor("start")
+            if r.has_gps:
+                win._gate_at_cursor("start")
             log.append(f"laps={[round(l.time, 3) for l in win.laps]}")
             win.seek(r.t[0] + r.duration * 0.6)
             deadline = QtCore.QDeadlineTimer(25000)
@@ -1351,6 +1866,18 @@ def run_selftest(win: MainWindow, app: QtWidgets.QApplication, out_dir: str, pat
                     ok &= len(win._selected_laps()) == 3
                     win.grab().save(os.path.join(out_dir, "selftest-compare.png"))
                     win.lap_table.clearSelection()
+            if win.carlog is not None:
+                app.processEvents()
+                log.append(f"car log: {len(win.carlog.series)} signals, {win.carlog.frame_count} frames, dbc={win.carlog.dbc_name!r}, "
+                           f"offset={win._car_offset():+.2f} s, plots={len(win.car_plots)}")
+                ok &= len(win.carlog.series) > 0 and len(win.car_plots) > 0
+                win.tabs.setCurrentIndex(2)
+                win.seek(r.t[0] + r.duration * 0.45)
+                app.processEvents()
+                win.grab().save(os.path.join(out_dir, "selftest-car.png"))
+            elif any(p.lower().endswith((".mf4", ".dbc")) for p in paths):
+                log.append("car log: requested but not loaded")
+                ok = False
             win.toggle_play()
             t0 = win.t
             end = QtCore.QTime.currentTime().addMSecs(600)

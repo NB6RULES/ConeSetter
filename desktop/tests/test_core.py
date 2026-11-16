@@ -150,6 +150,73 @@ check(used.z == rng.z - 1 and len(blobs) == used.count and len(set(blobs.values(
 us, uw, un, ue = used.bounds()
 check(us <= box[0] and uw <= box[1] and un >= box[2] and ue >= box[3], "the shallower tiles still cover the track")
 
+print("== Car logs (DBC + MF4)")
+from analyzer import canlog  # noqa: E402
+dbc = canlog.parse_dbc("""
+BO_ 256 Msg_A: 8 X
+ SG_ U8_le : 0|8@1+ (0.5,10) [0|0] "V" X
+ SG_ S16_le : 8|16@1- (0.1,0) [0|0] "deg" X
+ SG_ Bits_le : 28|3@1+ (1,0) [0|0] "" X
+ SG_ U16_be : 39|16@0+ (1,0) [0|0] "rpm" X
+ SG_ S12_be : 55|12@0- (1,0) [0|0] "" X
+ SG_ Flag : 63|1@1- (1,0) [0|1] "" X
+ SG_ Raw_only : 56|4@1+ (0,0) [0|0] "" X
+BO_ 2566844926 Msg_ext: 8 X
+ SG_ Val : 0|32@1+ (1,0) [0|0] "" X
+CM_ SG_ 256 U8_le "eight bits";
+VAL_ 256 Bits_le 5 "FIVE" 2 "TWO" ;
+""", "t.dbc")
+msg = dbc.find(256, False)
+payload = np.array([[0x10, 0x9C, 0xFF, 0x50, 0x12, 0x34, 0x8F, 0xF5]], dtype=np.uint8)
+vals = {sg.name: float(canlog.decode_signal(sg, payload)[0]) for sg in msg.signals}
+check(vals["U8_le"] == 18.0, f"unsigned little-endian with scale and offset ({vals['U8_le']})")
+check(abs(vals["S16_le"] + 10.0) < 1e-9, f"signed little-endian (0xFF9C = -100 -> {vals['S16_le']})")
+check(vals["Bits_le"] == 5.0, f"bit field inside a byte ({vals['Bits_le']})")
+check(vals["U16_be"] == 0x1234, f"big-endian 16-bit (0x1234 -> {vals['U16_be']:.0f})")
+check(vals["S12_be"] == -1793.0, f"signed big-endian 12-bit across a byte boundary ({vals['S12_be']})")
+check(vals["Flag"] == 1.0, "a 1-bit signal marked signed still reads 1, not -1")
+check(vals["Raw_only"] == 5.0 and next(sg for sg in msg.signals if sg.name == "Raw_only").scale_missing,
+      "a scale of 0 in the DBC falls back to the raw value")
+check(msg.signals[2].choices == {5: "FIVE", 2: "TWO"} and msg.signals[0].comment == "eight bits", "value table and comment read")
+check(dbc.find(0x18FEF1FE, True) is not None and dbc.find(0x18FEF1FE, False) is None, "extended (29-bit) ID recognised")
+
+sample = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sample")
+demo_dbc = canlog.load_dbc(os.path.join(sample, "demo-car.dbc"))
+car = canlog.load_car_log(os.path.join(sample, "demo-car-log.mf4"), demo_dbc)
+gps = data.load_path(os.path.join(sample, "demo-runs.zip"))[0][0]
+check(car.frame_count == 14112 and len([s for s in car.series if s.decoded]) == 11, f"demo MF4 read: {car.frame_count} frames, {len(car.series)} signals")
+check(any("0x300" in n for n in car.notes) and car.series[-1].decoded is False, "message missing from the DBC kept as raw bytes, listed last")
+volts = car.find("Vehicle_status (0x102).Battery_voltage_V")
+check(volts is not None and 12.6 < volts.value_at(30) < 13.2, f"big-endian signal from the MF4 ({volts.value_at(30):.2f} V)")
+state = car.find("Vehicle_status (0x102).AS_state")
+check(state.text_at(1.0) == "AS_READY (2)" and state.text_at(40.0) == "AS_DRIVING (3)", "state names shown from the value table")
+off = canlog.clock_offset(car.start, gps.start)
+check(off is not None and abs(off + 6.0) < 1e-6, f"clock offset between logger and phone: {off:+.2f} s")
+check(abs(canlog.overlap(car, off, gps.t[0], gps.t[-1]) - gps.duration) < 0.2, "log covers the whole run at that offset")
+spd = car.find("Driver_inputs (0x101).Vehicle_speed_kmh")
+worst = max(abs(spd.value_at(tt - off) - gps.value_at(gps.speed, tt) * 3.6) for tt in np.arange(5, 80, 1.7))
+check(worst < 1.5, f"CAN speed lines up with GPS speed at the clock offset (worst {worst:.2f} km/h)")
+found_off = canlog.align_by_signal(car.find("Wheel_speeds (0x100).RR_wheel_speed_rpm"), gps.t, gps.speed)
+check(found_off is not None and abs(found_off[0] + 6.0) < 0.15 and found_off[1] > 0.8,
+      f"offset recovered from a wheel-speed signal alone: {found_off[0]:+.2f} s, match {found_off[1]:.0%}")
+weak = canlog.align_by_signal(volts, gps.t, gps.speed)
+check(weak is None or weak[1] < 0.8, "a signal unrelated to speed gives a poor match score")
+raw = canlog.decode(car.frames, None, "x")
+check(all(not s.decoded for s in raw.series) and len(raw.series) == 8 * 3 + 4, "without a DBC every message shows as raw bytes")
+with tempfile.TemporaryDirectory() as tmp:
+    junk = os.path.join(tmp, "junk.mf4")
+    open(junk, "wb").write(b"not an mf4 file at all")
+    try:
+        canlog.load_car_log(junk, None)
+        check(False, "a broken MF4 is refused")
+    except canlog.CanLogError as e:
+        check(True, f"a broken MF4 is refused with a message: {str(e)[:60]}")
+    try:
+        canlog.parse_dbc("hello world", "x.dbc")
+        check(False, "an empty DBC is refused")
+    except canlog.CanLogError:
+        check(True, "a file that isn't a DBC is refused")
+
 print("== Updates")
 from analyzer import updater  # noqa: E402
 rel = updater.parse_manifest('{"version": "1.2.0", "build": 14, "url": "https://example.invalid/a.exe", "notes": "n", "size": "5"}')

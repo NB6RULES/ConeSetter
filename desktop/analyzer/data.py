@@ -39,6 +39,7 @@ class Run:
     run_type: str = ""
     notes: str = ""
     source: str = ""
+    has_gps: bool = True   # False for a run built from a car log alone (no positions)
     x: np.ndarray = field(default=None, repr=False)   # metres east of the first point
     y: np.ndarray = field(default=None, repr=False)   # metres north of the first point
 

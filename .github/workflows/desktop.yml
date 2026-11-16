@@ -45,13 +45,14 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --windowed --name OBRA-Run-Analyzer `
             --icon icon.ico --add-data "icon.png;." `
             --exclude-module tkinter --exclude-module matplotlib --exclude-module scipy --exclude-module PyQt5 --exclude-module PyQt6 `
+            --exclude-module asammdf.gui --exclude-module IPython --exclude-module pytest `
             run_analyzer.py
           Get-Item dist\OBRA-Run-Analyzer.exe | Format-List Name, Length
 
       - name: Self-test the built exe
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath "dist\OBRA-Run-Analyzer.exe" -ArgumentList "--selftest","selftest-out","sample\demo-runs.zip" -Wait -PassThru
+          $p = Start-Process -FilePath "dist\OBRA-Run-Analyzer.exe" -ArgumentList "--selftest","selftest-out","sample\demo-runs.zip","sample\demo-car-log.mf4","sample\demo-car.dbc" -Wait -PassThru
           Get-Content selftest-out\selftest.txt
           if ($p.ExitCode -ne 0) { throw "self-test failed with exit code $($p.ExitCode)" }
 
@@ -87,13 +88,13 @@ jobs:
           $v = python -c "import analyzer; print(analyzer.__version__)"
           $build = "${{ github.run_number }}"
           $title = "OBRA Run Analyzer for Windows: $v (build $build)"
-          $notes = "Windows app to play back and analyse speed runs from the phone app. Download **OBRA-Run-Analyzer.exe** and run it (no installer). It checks for updates itself. demo-runs.zip is sample data to try. This entry is replaced by every new build."
+          $notes = "Windows app to play back and analyse speed runs from the phone app. Download **OBRA-Run-Analyzer.exe** and run it (no installer). It checks for updates itself. demo-runs.zip is sample data to try, and demo-car-log.mf4 with demo-car.dbc is a matching car log. This entry is replaced by every new build."
           Copy-Item sample\demo-runs.zip demo-runs.zip
-          # The first build was published under its own tag before the rolling tag existed.
-          gh release delete analyzer-v1.0.0-b1 --cleanup-tag -y *> $null
+          Copy-Item sample\demo-car-log.mf4 demo-car-log.mf4
+          Copy-Item sample\demo-car.dbc demo-car.dbc
           gh release view analyzer-latest *> $null
           if ($LASTEXITCODE -ne 0) { gh release create analyzer-latest --title $title --notes $notes --latest=false --target $env:GITHUB_SHA }
-          gh release upload analyzer-latest "dist\OBRA-Run-Analyzer.exe" demo-runs.zip selftest-out\selftest-run.png selftest-out\selftest-compare.png selftest-out\selftest.txt --clobber
+          gh release upload analyzer-latest "dist\OBRA-Run-Analyzer.exe" demo-runs.zip demo-car-log.mf4 demo-car.dbc selftest-out\selftest-run.png selftest-out\selftest-compare.png selftest-out\selftest-car.png selftest-out\selftest.txt --clobber
           if ($LASTEXITCODE -ne 0) { throw "upload failed" }
           gh release edit analyzer-latest --title $title --notes $notes --latest=false
           $manifest = [ordered]@{

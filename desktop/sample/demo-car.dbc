@@ -1,0 +1,28 @@
+VERSION ""
+
+BS_:
+
+BU_: VCU LOGGER
+
+BO_ 256 Wheel_speeds: 8 VCU
+ SG_ FL_wheel_speed_rpm : 0|16@1+ (0.1,0) [0|6553.5] "rpm" LOGGER
+ SG_ FR_wheel_speed_rpm : 16|16@1+ (0.1,0) [0|6553.5] "rpm" LOGGER
+ SG_ RL_wheel_speed_rpm : 32|16@1+ (0.1,0) [0|6553.5] "rpm" LOGGER
+ SG_ RR_wheel_speed_rpm : 48|16@1+ (0.1,0) [0|6553.5] "rpm" LOGGER
+
+BO_ 257 Driver_inputs: 8 VCU
+ SG_ Steer_angle_deg : 0|16@1- (0.1,0) [-180|180] "deg" LOGGER
+ SG_ Brake_pressure_pct : 16|8@1+ (0.5,0) [0|100] "%" LOGGER
+ SG_ Throttle_pct : 24|8@1+ (0.5,0) [0|100] "%" LOGGER
+ SG_ Vehicle_speed_kmh : 32|16@1+ (0.01,0) [0|655.35] "km/h" LOGGER
+
+BO_ 258 Vehicle_status: 4 VCU
+ SG_ AS_state : 0|4@1+ (1,0) [0|7] "" LOGGER
+ SG_ Brake_light : 4|1@1+ (1,0) [0|1] "" LOGGER
+ SG_ Battery_voltage_V : 15|16@0+ (0.01,0) [0|655.35] "V" LOGGER
+
+CM_ BO_ 256 "Wheel speeds from the four hall sensors";
+CM_ SG_ 257 Steer_angle_deg "Steering angle at the wheels, positive to the left";
+CM_ SG_ 258 Battery_voltage_V "Low-voltage battery (big-endian on purpose, to exercise the decoder)";
+VAL_ 258 AS_state 5 "AS_FINISHED" 4 "EMERGENCY_BRAKE" 3 "AS_DRIVING" 2 "AS_READY" 1 "AS_OFF" ;
+VAL_ 258 Brake_light 1 "ON" 0 "OFF" ;
