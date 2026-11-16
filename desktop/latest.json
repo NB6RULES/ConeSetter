@@ -1,8 +1,8 @@
 {
   "version": "1.3.0",
-  "build": 8,
+  "build": 9,
   "url": "https://github.com/NB6RULES/OBRA-Essentials/releases/download/analyzer-latest/OBRA-Run-Analyzer.exe",
-  "notes": "Analyzer 1.3: open car logs (MF4 + DBC) and view CAN signals on the same timeline as the GPS run",
+  "notes": "Analyzer: Car data tab adapts to small windows",
   "date": "2026-11-16",
-  "size": 91302247
+  "size": 91300587
 }
