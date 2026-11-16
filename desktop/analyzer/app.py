@@ -414,8 +414,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update_btn.clicked.connect(lambda: self.check_updates(manual=True))
         outer.addLayout(row(self.open_btn, self.car_btn, _stretch(self.heading), self.update_btn,
                             label("Map", "muted"), self.map_box,
-                            label("Colour track by", "muted"), self.color_box,
-                            label("Graphs against", "muted"), self.x_box,
+                            label("Colour", "muted"), self.color_box,
+                            label("X axis", "muted"), self.x_box,
                             label("Units", "muted"), self.unit_box, spacing=8))
 
         self.stack = QtWidgets.QStackedWidget()
@@ -954,13 +954,15 @@ class MainWindow(QtWidgets.QMainWindow):
     # ------------------------------------------------------------ car data (MF4 + DBC)
 
     def _build_car_tab(self) -> QtWidgets.QWidget:
-        w = QtWidgets.QWidget()
-        lay = QtWidgets.QHBoxLayout(w)
-        lay.setContentsMargins(6, 6, 6, 6)
-        lay.setSpacing(8)
+        """Signal list and alignment controls on the left, graphs on the right. A splitter lets either side
+        shrink, so nothing overlaps on small or scaled-up screens."""
+        split = QtWidgets.QSplitter(Qt.Horizontal)
+        split.setChildrenCollapsible(False)
 
-        left = QtWidgets.QVBoxLayout()
-        left.setSpacing(4)
+        lw = QtWidgets.QWidget()
+        left = QtWidgets.QVBoxLayout(lw)
+        left.setContentsMargins(6, 6, 2, 6)
+        left.setSpacing(5)
         self.car_filter = QtWidgets.QLineEdit()
         self.car_filter.setPlaceholderText("Find a signal…")
         self.car_filter.setClearButtonEnabled(True)
@@ -971,20 +973,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.car_tree.setUniformRowHeights(True)
         self.car_tree.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         self.car_tree.header().setSectionResizeMode(1, QtWidgets.QHeaderView.Interactive)
-        self.car_tree.header().resizeSection(1, 124)
-        self.car_tree.setTextElideMode(Qt.ElideMiddle)
+        self.car_tree.header().resizeSection(1, 118)
         self.car_tree.header().setStretchLastSection(False)
+        self.car_tree.setTextElideMode(Qt.ElideMiddle)
+        self.car_tree.setMinimumHeight(90)
         self.car_tree.itemChanged.connect(self._car_item_changed)
         left.addWidget(self.car_filter)
         left.addWidget(self.car_tree, 1)
-        lw = QtWidgets.QWidget()
-        lw.setLayout(left)
-        lw.setMinimumWidth(350)
-        lw.setMaximumWidth(480)
-        lay.addWidget(lw, 0)
 
-        right = QtWidgets.QVBoxLayout()
-        right.setSpacing(4)
         self.car_offset = QtWidgets.QDoubleSpinBox()
         self.car_offset.setRange(-1e7, 1e7)
         self.car_offset.setDecimals(2)
@@ -999,28 +995,52 @@ class MainWindow(QtWidgets.QMainWindow):
         self.car_match_btn.setToolTip("Click a vehicle-speed or wheel-speed signal in the list, then press this to "
                                       "find the offset where it best follows the GPS speed")
         self.car_match_btn.clicked.connect(self._car_match)
-        self.car_gps_box = QtWidgets.QCheckBox("GPS speed")
+        self.car_gps_box = QtWidgets.QCheckBox("GPS speed graph")
         self.car_gps_box.setChecked(True)
         self.car_gps_box.toggled.connect(lambda _: self._draw_car_plots())
-        right.addLayout(row(label("Log offset", "muted"), self.car_offset, self.car_clock_btn, self.car_match_btn,
-                            None, self.car_gps_box, spacing=8))
+        offset_row = QtWidgets.QHBoxLayout()
+        offset_row.setSpacing(6)
+        offset_row.addWidget(label("Log offset", "muted"))
+        offset_row.addWidget(self.car_offset, 1)
+        left.addLayout(offset_row)
+        buttons = QtWidgets.QHBoxLayout()
+        buttons.setSpacing(6)
+        buttons.addWidget(self.car_clock_btn, 1)
+        buttons.addWidget(self.car_match_btn, 1)
+        left.addLayout(buttons)
+        left.addWidget(self.car_gps_box)
         self.car_status = label("", "muted", wrap=True)
-        right.addWidget(self.car_status)
-        self.car_plot_box = QtWidgets.QVBoxLayout()
-        self.car_plot_box.setSpacing(2)
+        self.car_status.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        self.car_status.setAlignment(Qt.AlignTop)
+        status_scroll = QtWidgets.QScrollArea()
+        status_scroll.setWidget(self.car_status)
+        status_scroll.setWidgetResizable(True)
+        status_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        status_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        status_scroll.setFixedHeight(92)
+        status_scroll.setStyleSheet(f"QScrollArea {{ background: {SURFACE}; }}")
+        status_scroll.viewport().setStyleSheet(f"background: {SURFACE};")
+        self.car_status.setStyleSheet(f"background: {SURFACE}; color: {MUTED};")
+        left.addWidget(status_scroll)
+        lw.setMinimumWidth(230)
+        split.addWidget(lw)
+
         holder = QtWidgets.QWidget()
-        holder.setLayout(self.car_plot_box)
-        right.addWidget(holder, 1)
+        self.car_plot_box = QtWidgets.QVBoxLayout(holder)
+        self.car_plot_box.setContentsMargins(2, 6, 6, 6)
+        self.car_plot_box.setSpacing(2)
         self.car_empty = label("Open a car log (.mf4) together with its .dbc to see the CAN signals here, on the same "
                                "timeline as the GPS run. Use “Open car log…” at the top, or drop both files on the window.",
                                "muted", wrap=True)
         self.car_empty.setAlignment(Qt.AlignCenter)
         self.car_plot_box.addWidget(self.car_empty, 1)
-        rw = QtWidgets.QWidget()
-        rw.setLayout(right)
-        lay.addWidget(rw, 1)
+        holder.setMinimumWidth(160)
+        split.addWidget(holder)
+        split.setStretchFactor(0, 0)
+        split.setStretchFactor(1, 1)
+        split.setSizes([350, 500])
         self._car_controls_enabled()
-        return w
+        return split
 
     def _car_controls_enabled(self):
         on = self.carlog is not None and self.run is not None
@@ -1303,9 +1323,10 @@ class MainWindow(QtWidgets.QMainWindow):
             return line
 
         plots = []
+        axis_w = 110 if any(s.choices for s in chosen) else 56      # room for state names only when needed
         if self.car_gps_box.isChecked() and r.has_gps:
             p = make_plot()
-            p.getAxis("left").setWidth(110)
+            p.getAxis("left").setWidth(axis_w)
             p.plot(self._xs(), r.speed * UNITS[self.unit], pen=pg.mkPen(ACCENT, width=2))
             p.setTitle(f"<span style='color:{ACCENT}'>GPS speed</span> <span style='color:{MUTED}'>{self.unit}</span>", size="9pt")
             self._car_gps_plot = p
@@ -1313,7 +1334,7 @@ class MainWindow(QtWidgets.QMainWindow):
             plots.append(p)
         for n, s in enumerate(chosen):
             p = make_plot()
-            p.getAxis("left").setWidth(110)
+            p.getAxis("left").setWidth(axis_w)
             color = LAP_COLORS[(n + 1) % len(LAP_COLORS)]
             x = to_x(s.t)
             sparse = s.is_state or len(s.t) < 4000
