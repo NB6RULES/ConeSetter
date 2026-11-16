@@ -740,26 +740,41 @@ class MainWindow(QtWidgets.QMainWindow):
         self.open_files([u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()])
 
     def open_dialog(self):
-        last = self.settings.value("lastDir", "") if self.persist else ""
         paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
-            self, "Open runs", last, "Runs and car logs (*.zip *.csv *.xlsx *.gpx *.json *.mf4 *.dbc);;All files (*)")
+            self, "Open runs", self._last_dir(), "Runs and car logs (*.zip *.csv *.xlsx *.gpx *.json *.mf4 *.dbc);;All files (*)")
         if paths:
-            if self.persist:
-                self.settings.setValue("lastDir", os.path.dirname(paths[0]))
             self.open_files(paths)
 
     def open_car_dialog(self):
-        last = self.settings.value("lastCarDir", "") if self.persist else ""
         paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
-            self, "Open a car log and its DBC", last, "Car logs and DBC (*.mf4 *.mf *.dat *.dbc);;All files (*)")
+            self, "Open a car log and its DBC", self._last_dir(), "Car logs and DBC (*.mf4 *.mf *.dat *.dbc);;All files (*)")
         if paths:
-            if self.persist:
-                self.settings.setValue("lastCarDir", os.path.dirname(paths[0]))
             self.open_files(paths)
+
+    def _last_dir(self) -> str:
+        """The folder a file was last opened from or saved to. Every file window starts there.
+        If that folder has gone (a USB stick, say), the nearest folder above it that still exists is used."""
+        if not self.persist:
+            return ""
+        d = str(self.settings.value("lastDir", "") or "")
+        while d and not os.path.isdir(d):
+            parent = os.path.dirname(d)
+            d = "" if parent == d else parent
+        return d
+
+    def _remember_dir(self, path: str):
+        if not self.persist or not path:
+            return
+        d = path if os.path.isdir(path) else os.path.dirname(os.path.abspath(path))
+        if d and os.path.isdir(d):
+            self.settings.setValue("lastDir", d)
+            self.settings.sync()
 
     def open_files(self, paths: list[str], quiet: bool = False) -> list[str]:
         problems: list[str] = []
         added = 0
+        if paths:
+            self._remember_dir(paths[0])      # also covers files dropped on the window
         car_paths = [p for p in paths if os.path.splitext(p)[1].lower() in (".mf4", ".mf", ".dat", ".dbc")]
         paths = [p for p in paths if p not in car_paths]
         QtWidgets.QApplication.setOverrideCursor(Qt.WaitCursor)
@@ -1817,10 +1832,12 @@ class MainWindow(QtWidgets.QMainWindow):
     def _export_laps(self):
         if not self.laps or self.run is None:
             return
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export laps", safe_filename(self.run.name) + " laps.csv",
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export laps",
+                                                        os.path.join(self._last_dir(), safe_filename(self.run.name) + " laps.csv"),
                                                         "CSV (*.csv)")
         if not path:
             return
+        self._remember_dir(path)
         try:
             with open(path, "w", encoding="utf-8-sig", newline="") as fh:
                 fh.write(laps_csv(self.run, self.laps, self.unit, UNITS[self.unit]))
